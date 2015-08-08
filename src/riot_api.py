@@ -1,21 +1,9 @@
 from __future__ import unicode_literals
 import logging
-import sys
-import argparse
 import time
 import urlparse
+
 import requests
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    return parser.parse_args()
-
-def main():
-    args = parse_args()
-
-if __name__ == "__main__":
-    sys.exit(main())
 
 
 class RiotService(object):
@@ -33,7 +21,8 @@ class RiotService(object):
 
     @staticmethod
     def from_config(config_parser):
-        return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"), config_parser.get("riot", "observer_base"), config_parser.get("riot", "api_key"))
+        return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"),
+                           config_parser.get("riot", "observer_base"), config_parser.get("riot", "api_key"))
 
     def request(self, endpoint, base_url=None):
         self.throttle()
@@ -84,6 +73,28 @@ class RiotService(object):
     def get_summoner_id(self, summoner_name):
         return self.request("v1.4/summoner/by-name/{}".format(summoner_name)).values()[0]["id"]
 
+    def get_summoner(self, name=None, id=None):
+        if name:
+            return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)))
+        else:
+            return None
+
     def get_featured_matches(self):
         data = self.request("https://na.api.pvp.net/observer-mode/rest/featured", self.observer_base_url)
         return data["gameList"], data["clientRefreshInterval"]
+
+
+class FeaturedParticipant:
+    def __init__(self, data):
+        self.teamId = data["teamId"]
+        self.spells = [data["spell1Id"], data["spell2Id"]]
+        self.championId = data["championId"]
+        self.name = data["summonerName"]
+
+
+class Summoner:
+    def __init__(self, data):
+        data = data.values()[0]
+
+        self.id = data["id"]
+        self.name = data["name"]

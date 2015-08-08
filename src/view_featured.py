@@ -1,13 +1,9 @@
 from __future__ import unicode_literals
 import ConfigParser
 import collections
-import logging
-import sys
-import argparse
 import math
-import requests
 
-from src.riot_api import RiotService
+from src.riot_api import *
 
 
 def parse_args():
@@ -35,20 +31,20 @@ def main():
 
         for player in game["participants"]:
             # print "{} team: {}".format(connection.get_team_name(player["teamId"]), player["summonerName"])
-            champion_name = connection.get_champion_info(player["championId"])["name"]
+            player = FeaturedParticipant(player)
+            champion_name = connection.get_champion_info(player.championId)["name"]
 
             try:
                 # get summoner id
-                summoner_id = connection.get_summoner_id(player["summonerName"])
-                assert isinstance(summoner_id, int)
-                summoner_data = connection.get_summoner_ranked_stats(summoner_id)
+                summoner = connection.get_summoner(name=player.name)
+                summoner_data = connection.get_summoner_ranked_stats(summoner.id)
 
                 # win rates
                 overall = collections.Counter()
                 this_champ = collections.Counter()
                 for champion in summoner_data["champions"]:
                     overall.update(champion["stats"])
-                    if champion["id"] == player["championId"]:
+                    if champion["id"] == player.championId:
                         this_champ.update(champion["stats"])
 
                 try:
@@ -61,9 +57,9 @@ def main():
                 overall_win_rate = overall["totalSessionsWon"] / float(overall["totalSessionsPlayed"])
                 overall_conf_interval = z_score_target * math.sqrt(overall_win_rate * (1. - overall_win_rate) / (overall["totalSessionsPlayed"] + z_score_target ** 2))
 
-                print connection.get_team_name(player["teamId"]), player["summonerName"], champion_name, "{:.1f}% win rate +/- {:.1f}% ({:.1f}% +/- {:.1f}% overall)".format(100 * win_rate, 100 * conf_interval, 100 * overall_win_rate, 100 * overall_conf_interval)
+                print connection.get_team_name(player.teamId), player.name, champion_name, "{:.1f}% win rate +/- {:.1f}% ({:.1f}% +/- {:.1f}% overall)".format(100 * win_rate, 100 * conf_interval, 100 * overall_win_rate, 100 * overall_conf_interval)
             except requests.exceptions.HTTPError:
-                print connection.get_team_name(player["teamId"]), player["summonerName"], champion_name
+                print connection.get_team_name(player.teamId), player.name, champion_name
 
 
 if __name__ == "__main__":
