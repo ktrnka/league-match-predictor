@@ -12,7 +12,6 @@ from src.riot_api import RiotService
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Config file")
-    parser.add_argument("match_id", help="ID of the match to use")
     return parser.parse_args()
 
 
@@ -25,30 +24,26 @@ def main():
     config.read([args.config])
 
     connection = RiotService.from_config(config)
+
+    games, refresh_interval = connection.get_featured_matches()
     data = connection.get_match(args.match_id)
-
-    teams = data["teams"]
-    for team in teams:
-        team["players"] = []
-    teams = {team["teamId"]: team for team in teams}
-
-    for participant, identity in zip(data["participants"], data["participantIdentities"]):
-        assert identity["participantId"] == participant["participantId"]
-        teams[participant["teamId"]]["players"].append((participant, identity))
 
     z_score_target = 1.6
 
-    for team in teams.itervalues():
-        print "{} team".format(connection.get_team_name(team["teamId"])), "winner" if team["winner"] else "loser"
+    for game in games:
+        for player in game["participants"]:
+            # print "{} team: {}".format(connection.get_team_name(player["teamId"]), player["summonerName"])
 
-        for participant, identity in team["players"]:
-            summoner_data = connection.get_summoner_ranked_stats(identity["player"]["summonerId"])
+            # get summoner id
+            summoner_id = connection.get_summoner_id(player["summonerName"])
+            summoner_data = connection.get_summoner_ranked_stats(summoner_id)
 
+            # win rates
             overall = collections.Counter()
             this_champ = collections.Counter()
             for champion in summoner_data["champions"]:
                 overall.update(champion["stats"])
-                if champion["id"] == participant["championId"]:
+                if champion["id"] == player["championId"]:
                     this_champ.update(champion["stats"])
 
             win_rate = this_champ["totalSessionsWon"] / float(this_champ["totalSessionsPlayed"])
@@ -59,10 +54,9 @@ def main():
 
 
 
-            champion_name = connection.get_champion_info(participant["championId"])["name"]
+            champion_name = connection.get_champion_info(player["championId"])["name"]
 
-            print "\t", identity["player"]["summonerName"], champion_name, "{:.1f}% win rate +/- {:.1f}% ({:.1f}% +/- {:.1f}% overall)".format(100 * win_rate, 100 * conf_interval, 100 * overall_win_rate, 100 * overall_conf_interval)
-
+            print connection.get_team_name(player["teamId"]), player["summonerName"], champion_name, "{:.1f}% win rate +/- {:.1f}% ({:.1f}% +/- {:.1f}% overall)".format(100 * win_rate, 100 * conf_interval, 100 * overall_win_rate, 100 * overall_conf_interval)
 
 
 if __name__ == "__main__":

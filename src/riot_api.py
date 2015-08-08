@@ -19,9 +19,10 @@ if __name__ == "__main__":
 
 
 class RiotService(object):
-    def __init__(self, base_url, static_base_url, api_key):
+    def __init__(self, base_url, static_base_url, observer_base_url, api_key):
         self.base_url = base_url
         self.static_base_url = static_base_url
+        self.observer_base_url = observer_base_url
         self.api_key = api_key
         self.params = {"api_key": self.api_key}
         self.champions = None
@@ -30,9 +31,13 @@ class RiotService(object):
         self.delay_seconds = 1.2
         self.logger = logging.getLogger("RiotService")
 
-    def request(self, endpoint):
+    @staticmethod
+    def from_config(config_parser):
+        return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"), config_parser.get("riot", "observer_base"), config_parser.get("riot", "api_key"))
+
+    def request(self, endpoint, base_url=None):
         self.throttle()
-        response = requests.get(urlparse.urljoin(self.base_url, endpoint), params=self.params)
+        response = requests.get(urlparse.urljoin(base_url or self.base_url, endpoint), params=self.params)
         response.raise_for_status()
         data = response.json()
         return data
@@ -75,3 +80,7 @@ class RiotService(object):
 
     def get_summoner_ranked_stats(self, summoner_id):
         return self.request("v1.3/stats/by-summoner/{summonerId}/ranked".format(summonerId=summoner_id))
+
+    def get_featured_matches(self):
+        data = self.request("https://na.api.pvp.net/observer-mode/rest/featured", self.observer_base_url)
+        return data["gameList"], data["clientRefreshInterval"]
