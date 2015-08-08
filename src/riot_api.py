@@ -4,6 +4,7 @@ import time
 import urlparse
 
 import requests
+from src.riot_data import Summoner
 
 
 class RiotService(object):
@@ -75,9 +76,20 @@ class RiotService(object):
 
     def get_summoner(self, name=None, id=None):
         if name:
-            return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)))
+            return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
         else:
             return None
+
+    def get_summoners(self, ids=None, names=None):
+        assert ids or names
+
+        if ids:
+            self.logger.info("Requesting summoners {}".format(ids))
+            data = self.request("v1.4/summoner/{}".format(",".join([str(x) for x in ids])))
+        else:
+            data = self.request("v1.4/summoner/by-name/{}".format(",".join(names)))
+
+        return [Summoner(s) for s in data.itervalues()]
 
     def get_featured_matches(self):
         data = self.request("https://na.api.pvp.net/observer-mode/rest/featured", self.observer_base_url)
@@ -92,9 +104,3 @@ class FeaturedParticipant:
         self.name = data["summonerName"]
 
 
-class Summoner:
-    def __init__(self, data):
-        data = data.values()[0]
-
-        self.id = data["id"]
-        self.name = data["name"]
