@@ -81,6 +81,9 @@ class RiotService(object):
     def get_summoner_ranked_stats(self, summoner_id):
         return self.request("v1.3/stats/by-summoner/{summonerId}/ranked".format(summonerId=summoner_id))
 
+    def get_summoner_id(self, summoner_name):
+        return self.request("v1.4/summoner/by-name/{}".format(summoner_name)).values()[0]["id"]
+
     def get_featured_matches(self):
         data = self.request("https://na.api.pvp.net/observer-mode/rest/featured", self.observer_base_url)
         return data["gameList"], data["clientRefreshInterval"]
