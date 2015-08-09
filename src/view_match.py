@@ -6,7 +6,7 @@ import sys
 import argparse
 import math
 
-from src.riot_api import RiotService
+from riot_api import RiotService
 
 
 def parse_args():

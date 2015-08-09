@@ -5,7 +5,7 @@ import time
 import urlparse
 
 import requests
-from src.riot_data import Summoner
+from riot_data import Summoner
 
 
 class RiotService(object):

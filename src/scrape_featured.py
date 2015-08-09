@@ -3,8 +3,8 @@ import ConfigParser
 import argparse
 import sys
 
-from src.riot_api import *
-from src.riot_api_cache import ApiCache
+from riot_api import *
+from riot_api_cache import ApiCache
 
 
 def parse_args():

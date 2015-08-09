@@ -5,7 +5,7 @@ import collections
 import math
 import sys
 
-from src.riot_api import *
+from riot_api import *
 
 
 def parse_args():
