@@ -9,6 +9,7 @@ from riot_api_cache import ApiCache
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--verbose", default=False, action="store_true", help="Verbose logging")
     parser.add_argument("config", help="Config file")
     return parser.parse_args()
 
@@ -69,7 +70,10 @@ def queue_from_match_histories(riot_cache, riot_connection):
 def main():
     args = parse_args()
 
-    logging.basicConfig(level=logging.DEBUG)
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
     logging.captureWarnings(True)
 
     config = ConfigParser.RawConfigParser()

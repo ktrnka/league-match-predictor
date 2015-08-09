@@ -18,7 +18,7 @@ class RiotService(object):
         self.champions = None
 
         self.most_recent_request = None
-        self.delay_seconds = 1.3
+        self.delay_seconds = 1.4
         self.logger = logging.getLogger("RiotService")
 
     @staticmethod
