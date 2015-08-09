@@ -87,6 +87,12 @@ class RiotService(object):
         assert ids or names
 
         if ids:
+            if None in ids:
+                self.logger.warn("Empty IDs in list")
+                ids = [i for i in ids if i]
+                if not i:
+                    return []
+
             self.logger.info("Requesting summoners {}".format(ids))
             data = self.request("v1.4/summoner/{}".format(",".join([str(x) for x in ids])))
         else:
