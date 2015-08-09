@@ -25,7 +25,7 @@ def queue_featured(riot_cache, riot_connection):
         riot_cache.queue_match_id(game["gameId"])
 
         for player in game["participants"]:
-            player = FeaturedParticipant(player)
+            player = FeaturedParticipant.from_joined(player)
             summoner = riot_connection.get_summoner(name=player.name)
 
             riot_cache.queue_player_id(summoner.id)
@@ -49,8 +49,21 @@ def update_matches(riot_cache, riot_connection):
         try:
             match_info = riot_connection.get_match(match_id)
             riot_cache.update_match(match_info)
-        except requests.exceptions.HTTPError as e:
+
+            parsed_match = Match(match_info)
+            for player in parsed_match.players:
+                riot_cache.queue_player_id(player.id)
+        except requests.exceptions.HTTPError:
             logger.exception("Something went wrong in updating %d", match_id)
+
+
+def queue_from_match_histories(riot_cache, riot_connection):
+    for player in riot_cache.get_players():
+        assert isinstance(player, Summoner)
+        matches = riot_connection.get_match_history(player.id)
+
+        for match in matches:
+            riot_cache.queue_match_id(match.id)
 
 
 def main():
@@ -66,6 +79,7 @@ def main():
     riot_cache = ApiCache(config)
 
     # queue_featured(riot_cache, riot_connection)
+    queue_from_match_histories(riot_cache, riot_connection)
 
     update_summoners(riot_cache, riot_connection)
     update_matches(riot_cache, riot_connection)

@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import logging
+import pprint
 import time
 import urlparse
 
@@ -25,9 +26,11 @@ class RiotService(object):
         return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"),
                            config_parser.get("riot", "observer_base"), config_parser.get("riot", "api_key"))
 
-    def request(self, endpoint, base_url=None):
+    def request(self, endpoint, base_url=None, tries_left=1):
         self.throttle()
         response = requests.get(urlparse.urljoin(base_url or self.base_url, endpoint), params=self.params)
+        if response.status_code == 500 and tries_left > 0:
+            return self.request(endpoint, base_url, tries_left=tries_left-1)
         response.raise_for_status()
         data = response.json()
         return data
@@ -92,15 +95,53 @@ class RiotService(object):
         return [Summoner(s) for s in data.itervalues()]
 
     def get_featured_matches(self):
-        data = self.request("https://na.api.pvp.net/observer-mode/rest/featured", self.observer_base_url)
+        data = self.request("featured", self.observer_base_url)
         return data["gameList"], data["clientRefreshInterval"]
 
+    def get_match_history(self, summoner_id):
+        data = self.request("v2.2/matchhistory/{}".format(summoner_id))
+
+        if data:
+            for match in data["matches"]:
+                yield Match(match)
+
+
+class Match(object):
+    def __init__(self, data):
+        self.id = data["matchId"]
+        self.mode = data["matchMode"]
+        self.type = data["matchType"]
+        self.creation_time = data["matchCreation"]
+        self.duration = data["matchDuration"]
+        self.queue_type = data["queueType"]
+        self.version = data["matchVersion"]
+
+        self.players = list(FeaturedParticipant.parse_participants(data["participants"], data["participantIdentities"]))
+
+        pprint.pprint({"id": self.id, "players": self.players})
 
 class FeaturedParticipant:
-    def __init__(self, data):
-        self.teamId = data["teamId"]
-        self.spells = [data["spell1Id"], data["spell2Id"]]
-        self.championId = data["championId"]
-        self.name = data["summonerName"]
+    def __init__(self, team_id, spells, champion_id, name, id=None):
+        assert len(spells) == 2
+
+        self.teamId = team_id
+        self.spells = spells
+        self.championId = champion_id
+        self.name = name
+        self.id = None
+
+    @staticmethod
+    def from_joined(data):
+        return FeaturedParticipant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["summonerName"])
+
+    @staticmethod
+    def parse_participants(participants, participant_identities):
+        for player, identity in zip(participants, participant_identities):
+            yield FeaturedParticipant.from_split(player, identity)
+
+    @staticmethod
+    def from_split(player, identity):
+        return FeaturedParticipant(player["teamId"], [player["spell1Id"], player["spell2Id"]], player["championId"], identity["player"]["summonerName"], id=identity["player"]["summonerId"])
+
 
 

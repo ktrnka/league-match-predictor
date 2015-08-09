@@ -30,6 +30,9 @@ class ApiCache(object):
             self.logger.info("Already queued match %d", id)
 
     def queue_player_id(self, id):
+        if not id:
+            self.logger.error("ID is null")
+            return
         player = self.players.find_one({"data": {"id": id}})
 
         if not player:
@@ -47,6 +50,10 @@ class ApiCache(object):
             assert isinstance(player, Summoner)
             self.logger.info("Updating %d -> %s", player.id, player.name)
             self.players.update({"data": {"id": player.id}}, self._wrap_data(player.export(), False))
+
+    def get_players(self):
+        for player_data in self.players.find({"queued": False}):
+            yield Summoner(player_data["data"])
 
     def update_match(self, match):
         self.matches.update({"data": {"matchId": match["matchId"]}}, self._wrap_data(match, False))
