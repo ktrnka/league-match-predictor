@@ -4,7 +4,7 @@ import logging
 import sys
 import argparse
 import pymongo
-from src.riot_data import Summoner
+from riot_data import Summoner
 
 
 class ApiCache(object):
