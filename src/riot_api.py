@@ -124,8 +124,6 @@ class Match(object):
 
         self.players = list(FeaturedParticipant.parse_participants(data["participants"], data["participantIdentities"]))
 
-        pprint.pprint({"id": self.id, "players": self.players})
-
 class FeaturedParticipant:
     def __init__(self, team_id, spells, champion_id, name, id=None):
         assert len(spells) == 2

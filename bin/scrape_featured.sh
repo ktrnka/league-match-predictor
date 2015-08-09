@@ -1,3 +1,2 @@
 #!/usr/bin/env bash
-cd ../src
-python scrape_featured.py ../config
+PYTHONPATH=$PYTHONPATH:src/ python src/scrape_featured.py config

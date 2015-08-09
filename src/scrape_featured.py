@@ -78,7 +78,7 @@ def main():
     riot_connection = RiotService.from_config(config)
     riot_cache = ApiCache(config)
 
-    # queue_featured(riot_cache, riot_connection)
+    queue_featured(riot_cache, riot_connection)
     queue_from_match_histories(riot_cache, riot_connection)
 
     update_summoners(riot_cache, riot_connection)
