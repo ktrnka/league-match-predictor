@@ -25,7 +25,8 @@ class ApiCache(object):
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
 
-    def _wrap_data(self, data, is_queued=True):
+    @staticmethod
+    def _wrap_data(data, is_queued=True):
         return {"data": data, "updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "queued": is_queued}
 
     def queue_match_id(self, id):

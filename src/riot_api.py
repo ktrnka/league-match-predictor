@@ -18,6 +18,7 @@ HTTP_HARD_ERRORS = {400, 401, 404, 422}
 # hit rate limit
 RATE_LIMIT_ERROR = 427
 
+
 class RiotService(object):
     def __init__(self, base_url, static_base_url, observer_base_url, api_key):
         self.base_url = base_url
@@ -45,7 +46,7 @@ class RiotService(object):
             self.logger.error("Request %s error code %d", full_url, response.status_code)
 
         if response.status_code in HTTP_TRANSIENT_ERRORS and tries_left > 0:
-            return self.request(endpoint, base_url, tries_left=tries_left-1)
+            return self.request(endpoint, base_url, tries_left=tries_left - 1)
 
         for exponential_level in xrange(1, 4):
             if response.status_code == HTTP_OK:
@@ -91,7 +92,8 @@ class RiotService(object):
             time.sleep(scaled_delay_seconds)
         self.most_recent_request = time.clock()
 
-    def get_team_name(self, team_id):
+    @staticmethod
+    def get_team_name(team_id):
         if team_id == 100:
             return "Blue"
         elif team_id == 200:
@@ -155,6 +157,7 @@ class Match(object):
 
         self.players = list(FeaturedParticipant.parse_participants(data["participants"], data["participantIdentities"]))
 
+
 class FeaturedParticipant:
     def __init__(self, team_id, spells, champion_id, name, id=None):
         assert len(spells) == 2
@@ -167,7 +170,8 @@ class FeaturedParticipant:
 
     @staticmethod
     def from_joined(data):
-        return FeaturedParticipant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["summonerName"])
+        return FeaturedParticipant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"],
+                                   data["summonerName"])
 
     @staticmethod
     def parse_participants(participants, participant_identities):
@@ -176,7 +180,8 @@ class FeaturedParticipant:
 
     @staticmethod
     def from_split(player, identity):
-        return FeaturedParticipant(player["teamId"], [player["spell1Id"], player["spell2Id"]], player["championId"], identity["player"]["summonerName"], id=identity["player"]["summonerId"])
+        return FeaturedParticipant(player["teamId"], [player["spell1Id"], player["spell2Id"]], player["championId"],
+                                   identity["player"]["summonerName"], id=identity["player"]["summonerId"])
 
 
 
