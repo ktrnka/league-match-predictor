@@ -61,10 +61,13 @@ def update_matches(riot_cache, riot_connection):
 def queue_from_match_histories(riot_cache, riot_connection):
     for player in riot_cache.get_players():
         assert isinstance(player, Summoner)
-        matches = riot_connection.get_match_history(player.id)
 
-        for match in matches:
-            riot_cache.queue_match_id(match.id)
+        try:
+            matches = riot_connection.get_match_history(player.id)
+            for match in matches:
+                riot_cache.queue_match_id(match.id)
+        except ValueError:
+            logging.getLogger(__name__).error("Bad summoner ID for player %s", player)
 
 
 def main():
@@ -76,6 +79,9 @@ def main():
         logging.basicConfig(level=logging.INFO)
     logging.captureWarnings(True)
     logger = logging.getLogger(__name__)
+
+    # reduce connection spam
+    logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(logging.WARNING)
 
     config = ConfigParser.RawConfigParser()
     config.read([args.config])

@@ -25,3 +25,6 @@ class Summoner:
 
     def export(self):
         return {"id": self.id, "name": self.name}
+
+    def __str__(self):
+        return "{}__{}".format(self.name, self.id)
