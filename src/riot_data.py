@@ -19,7 +19,9 @@ if __name__ == "__main__":
 class Summoner:
     def __init__(self, data):
         self.id = data["id"]
-        self.name = data["name"]
+
+        # unprocessed data may not have summoner names
+        self.name = data.get("name", None)
 
     def export(self):
         return {"id": self.id, "name": self.name}
