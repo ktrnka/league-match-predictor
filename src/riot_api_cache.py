@@ -7,14 +7,18 @@ import argparse
 import pymongo
 from riot_data import Summoner
 
+MATCH_COLLECTION = "matches"
+
+PLAYER_COLLECTION = "summoners"
+
 
 class ApiCache(object):
     def __init__(self, config):
         self.mongo_client = pymongo.MongoClient(config.get("mongo", "uri"))
         self.mongo_db = self.mongo_client.get_default_database()
 
-        self.players = self.mongo_db["summoners"]
-        self.matches = self.mongo_db["matches"]
+        self.players = self.mongo_db[PLAYER_COLLECTION]
+        self.matches = self.mongo_db[MATCH_COLLECTION]
 
         self.logger = logging.getLogger(__name__)
 
@@ -67,8 +71,18 @@ class ApiCache(object):
         self.matches.update({"data": {"matchId": match["matchId"]}}, self._wrap_data(match, False))
 
     def log_summary(self):
-        self.logger.info("New matches added: %.1f%%, (%d)", 100. * self.new_matches[True] / (self.new_matches[True] + self.new_matches[False]), self.new_matches[True])
-        self.logger.info("New players added: %.1f%%, (%d)", 100. * self.new_players[True] / (self.new_players[True] + self.new_players[False]), self.new_players[True])
+        self.logger.info("New matches added: %.1f%% of queries (%d)", 100. * self.new_matches[True] / (self.new_matches[True] + self.new_matches[False]), self.new_matches[True])
+        self.logger.info("New players added: %.1f%% of queries (%d)", 100. * self.new_players[True] / (self.new_players[True] + self.new_players[False]), self.new_players[True])
+
+    def summarize(self):
+        """Summarize the status of the database overall"""
+        players_queued, players_total = self.players.find({"queued": True}).count(), self.players.find({}).count()
+        matches_queued, matches_total = self.matches.find({"queued": True}).count(), self.matches.find({}).count()
+
+        return """
+        {:,} players queued ({:.1f}% of {:,})
+        {:,} matches queued ({:.1f}% of {:,})
+        """.format(players_queued, 100. * players_queued / players_total, players_total, matches_queued, 100. * matches_queued / matches_total, matches_total)
 
 
 def parse_args():

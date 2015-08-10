@@ -75,6 +75,7 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO)
     logging.captureWarnings(True)
+    logger = logging.getLogger(__name__)
 
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
@@ -82,11 +83,17 @@ def main():
     riot_connection = RiotService.from_config(config)
     riot_cache = ApiCache(config)
 
-    queue_featured(riot_cache, riot_connection)
-    queue_from_match_histories(riot_cache, riot_connection)
+    try:
+        queue_featured(riot_cache, riot_connection)
+        queue_from_match_histories(riot_cache, riot_connection)
 
-    update_summoners(riot_cache, riot_connection)
-    update_matches(riot_cache, riot_connection)
+        update_summoners(riot_cache, riot_connection)
+        update_matches(riot_cache, riot_connection)
+    except requests.exceptions.HTTPError as exc:
+        logger.exception("Unhandled HTTPError, aborting")
+
+    riot_cache.log_summary()
+    logger.info("Database status: %s", riot_cache.summarize())
 
 
 if __name__ == "__main__":
