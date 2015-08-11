@@ -28,14 +28,19 @@ class Envelope(object):
 
     @staticmethod
     def wrap(data, is_queued=True):
-        return Envelope(data, is_queued, datetime.now())
+        return {_ENVELOPE_DATA: data, _ENVELOPE_UPDATED_DATE: datetime.now().strftime(_MONGO_DATE_FORMAT), _ENVELOPE_IS_QUEUED: is_queued}
 
     @staticmethod
     def unwrap(mongo_object):
         return Envelope(mongo_object[_ENVELOPE_DATA], mongo_object[_ENVELOPE_IS_QUEUED], datetime.strptime(mongo_object[_ENVELOPE_UPDATED_DATE], _MONGO_DATE_FORMAT))
 
-    def export(self):
-        return {_ENVELOPE_DATA: self.data, _ENVELOPE_UPDATED_DATE: self.last_updated.strftime(_MONGO_DATE_FORMAT), _ENVELOPE_IS_QUEUED: self.is_queued}
+    @staticmethod
+    def query_queued(is_queued):
+        return {_ENVELOPE_IS_QUEUED: is_queued}
+
+    @staticmethod
+    def query_data(data_query):
+        return {_ENVELOPE_DATA: data_query}
 
 
 class ApiCache(object):
@@ -51,17 +56,13 @@ class ApiCache(object):
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
 
-    @staticmethod
-    def _wrap_data(data, is_queued=True):
-        return Envelope.wrap(data, is_queued).export()
-
     def queue_match_id(self, id):
-        match = self.matches.find_one({_ENVELOPE_DATA: {"matchId": id}})
+        match = self.matches.find_one(Envelope.query_data({"matchId": id}))
 
         if not match:
             self.logger.debug("Queueing match %d", id)
             self.new_matches[True] += 1
-            self.matches.insert_one(self._wrap_data({"matchId": id}))
+            self.matches.insert_one(Envelope.wrap({"matchId": id}))
         else:
             self.new_matches[False] += 1
             self.logger.debug("Already queued match %d", id)
@@ -70,32 +71,32 @@ class ApiCache(object):
         if not id:
             self.logger.error("ID is null")
             return
-        player = self.players.find_one({_ENVELOPE_DATA: {"id": id}})
+        player = self.players.find_one(Envelope.query_data({"id": id}))
 
         if not player:
             self.new_players[True] += 1
             self.logger.debug("Queueing player %d", id)
-            self.players.insert_one(self._wrap_data({"id": id}))
+            self.players.insert_one(Envelope.wrap({"id": id}))
         else:
             self.new_matches[False] += 1
             self.logger.debug("Already queued player %d", id)
 
     def get_queued(self, collection):
-        for item in collection.find({_ENVELOPE_IS_QUEUED: True}):
+        for item in collection.find(Envelope.query_queued(True)):
             yield item
+
+    def get_players(self):
+        for player_data in self.players.find(Envelope.query_queued(True)):
+            yield Summoner(Envelope.unwrap(player_data).data)
 
     def update_players(self, players):
         for player in players:
             assert isinstance(player, Summoner)
             self.logger.info("Updating %d -> %s", player.id, player.name)
-            self.players.update({_ENVELOPE_DATA: {"id": player.id}}, self._wrap_data(player.export(), False))
-
-    def get_players(self):
-        for player_data in self.players.find({_ENVELOPE_IS_QUEUED: True}):
-            yield Summoner(player_data[_ENVELOPE_DATA])
+            self.players.update(Envelope.query_data({"id": player.id}), Envelope.wrap(player.export(), False))
 
     def update_match(self, match):
-        self.matches.update({_ENVELOPE_DATA: {"matchId": match["matchId"]}}, self._wrap_data(match, False))
+        self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.wrap(match, False))
 
     def log_summary(self):
         self.logger.info("New matches added: %.1f%% of queries (%d)",
