@@ -82,9 +82,11 @@ class ApiCache(object):
             self.new_players[True] += 1
             self.logger.debug("Queueing player %d", id)
             self.players.insert_one(Envelope.wrap({"id": id}))
+            return True
         else:
             self.new_matches[False] += 1
             self.logger.debug("Already queued player %d", id)
+            return False
 
     def get_queued(self, collection, max_records):
         for item in collection.find(Envelope.query_queued(True)).limit(max_records):
