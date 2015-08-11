@@ -7,9 +7,35 @@ import argparse
 import pymongo
 from riot_data import Summoner
 
+_ENVELOPE_UPDATED_DATE = "updated"
+
+_ENVELOPE_IS_QUEUED = "queued"
+
+_ENVELOPE_DATA = "data"
+
+_MONGO_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
 MATCH_COLLECTION = "matches"
 
 PLAYER_COLLECTION = "summoners"
+
+
+class Envelope(object):
+    def __init__(self, data, is_queued, last_updated):
+        self.data = data
+        self.is_queued = is_queued
+        self.last_updated = last_updated
+
+    @staticmethod
+    def wrap(data, is_queued=True):
+        return Envelope(data, is_queued, datetime.now())
+
+    @staticmethod
+    def unwrap(mongo_object):
+        return Envelope(mongo_object[_ENVELOPE_DATA], mongo_object[_ENVELOPE_IS_QUEUED], datetime.strptime(mongo_object[_ENVELOPE_UPDATED_DATE], _MONGO_DATE_FORMAT))
+
+    def export(self):
+        return {_ENVELOPE_DATA: self.data, _ENVELOPE_UPDATED_DATE: self.last_updated.strftime(_MONGO_DATE_FORMAT), _ENVELOPE_IS_QUEUED: self.is_queued}
 
 
 class ApiCache(object):
@@ -27,10 +53,10 @@ class ApiCache(object):
 
     @staticmethod
     def _wrap_data(data, is_queued=True):
-        return {"data": data, "updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "queued": is_queued}
+        return Envelope.wrap(data, is_queued).export()
 
     def queue_match_id(self, id):
-        match = self.matches.find_one({"data": {"matchId": id}})
+        match = self.matches.find_one({_ENVELOPE_DATA: {"matchId": id}})
 
         if not match:
             self.logger.debug("Queueing match %d", id)
@@ -44,7 +70,7 @@ class ApiCache(object):
         if not id:
             self.logger.error("ID is null")
             return
-        player = self.players.find_one({"data": {"id": id}})
+        player = self.players.find_one({_ENVELOPE_DATA: {"id": id}})
 
         if not player:
             self.new_players[True] += 1
@@ -55,35 +81,40 @@ class ApiCache(object):
             self.logger.debug("Already queued player %d", id)
 
     def get_queued(self, collection):
-        for item in collection.find({"queued": True}):
+        for item in collection.find({_ENVELOPE_IS_QUEUED: True}):
             yield item
 
     def update_players(self, players):
         for player in players:
             assert isinstance(player, Summoner)
             self.logger.info("Updating %d -> %s", player.id, player.name)
-            self.players.update({"data": {"id": player.id}}, self._wrap_data(player.export(), False))
+            self.players.update({_ENVELOPE_DATA: {"id": player.id}}, self._wrap_data(player.export(), False))
 
     def get_players(self):
-        for player_data in self.players.find({"queued": True}):
-            yield Summoner(player_data["data"])
+        for player_data in self.players.find({_ENVELOPE_IS_QUEUED: True}):
+            yield Summoner(player_data[_ENVELOPE_DATA])
 
     def update_match(self, match):
-        self.matches.update({"data": {"matchId": match["matchId"]}}, self._wrap_data(match, False))
+        self.matches.update({_ENVELOPE_DATA: {"matchId": match["matchId"]}}, self._wrap_data(match, False))
 
     def log_summary(self):
-        self.logger.info("New matches added: %.1f%% of queries (%d)", 100. * self.new_matches[True] / (self.new_matches[True] + self.new_matches[False]), self.new_matches[True])
-        self.logger.info("New players added: %.1f%% of queries (%d)", 100. * self.new_players[True] / (self.new_players[True] + self.new_players[False]), self.new_players[True])
+        self.logger.info("New matches added: %.1f%% of queries (%d)",
+                         100. * self.new_matches[True] / (self.new_matches[True] + self.new_matches[False]),
+                         self.new_matches[True])
+        self.logger.info("New players added: %.1f%% of queries (%d)",
+                         100. * self.new_players[True] / (self.new_players[True] + self.new_players[False]),
+                         self.new_players[True])
 
     def summarize(self):
         """Summarize the status of the database overall"""
-        players_queued, players_total = self.players.find({"queued": True}).count(), self.players.find({}).count()
-        matches_queued, matches_total = self.matches.find({"queued": True}).count(), self.matches.find({}).count()
+        players_queued, players_total = self.players.find({_ENVELOPE_IS_QUEUED: True}).count(), self.players.find({}).count()
+        matches_queued, matches_total = self.matches.find({_ENVELOPE_IS_QUEUED: True}).count(), self.matches.find({}).count()
 
         return """
         {:,} players queued ({:.1f}% of {:,})
         {:,} matches queued ({:.1f}% of {:,})
-        """.format(players_queued, 100. * players_queued / players_total, players_total, matches_queued, 100. * matches_queued / matches_total, matches_total)
+        """.format(players_queued, 100. * players_queued / players_total, players_total, matches_queued,
+                   100. * matches_queued / matches_total, matches_total)
 
 
 def parse_args():
