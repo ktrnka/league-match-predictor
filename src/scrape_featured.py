@@ -46,14 +46,20 @@ def update_matches(riot_cache, riot_connection):
     logger = logging.getLogger("update_matches")
     for match in riot_cache.get_queued(riot_cache.matches):
         match_id = match["data"]["matchId"]
+        # logger.info("Updating from match %d", match_id)
 
         try:
             match_info = riot_connection.get_match(match_id)
             riot_cache.update_match(match_info)
 
-            parsed_match = Match(match_info)
-            for player in parsed_match.players:
-                riot_cache.queue_player_id(player.id)
+            try:
+                parsed_match = Match(match_info)
+                for player in parsed_match.players:
+                    if player.id:
+                        riot_cache.queue_player_id(player.id)
+            except KeyError:
+                # not all games have player identity info so skip if it fails
+                pass
         except requests.exceptions.HTTPError:
             logger.exception("Something went wrong in updating %d", match_id)
 
@@ -90,10 +96,10 @@ def main():
     riot_cache = ApiCache(config)
 
     try:
-        queue_featured(riot_cache, riot_connection)
-        queue_from_match_histories(riot_cache, riot_connection)
-
-        update_summoners(riot_cache, riot_connection)
+        # queue_featured(riot_cache, riot_connection)
+        # queue_from_match_histories(riot_cache, riot_connection)
+        #
+        # update_summoners(riot_cache, riot_connection)
         update_matches(riot_cache, riot_connection)
     except requests.exceptions.HTTPError as exc:
         logger.exception("Unhandled HTTPError, aborting")

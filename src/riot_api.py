@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+import collections
 import logging
 import pprint
 import time
@@ -7,8 +8,10 @@ import math
 
 import requests
 from riot_data import Summoner
+import utilities
 
 # error codes that happen cause a server is temporarily down/etc
+
 HTTP_OK = 200
 HTTP_TRANSIENT_ERRORS = {500, 503}
 
@@ -31,6 +34,11 @@ class RiotService(object):
         self.most_recent_request = None
         self.delay_seconds = 1.4
         self.logger = logging.getLogger("RiotService")
+        self.heartbeat_logger = logging.getLogger("RiotService.heartbeat")
+        self.heartbeat_logger.addFilter(utilities.ThrottledFilter())
+
+        self.num_requests = 0
+        self.request_types = collections.Counter()
 
     @staticmethod
     def from_config(config_parser):
@@ -41,6 +49,7 @@ class RiotService(object):
         self.throttle()
         full_url = urlparse.urljoin(base_url or self.base_url, endpoint)
         response = requests.get(full_url, params=self.params)
+        self.num_requests += 1
 
         if response.status_code != HTTP_OK:
             self.logger.error("Request %s error code %d", full_url, response.status_code)
@@ -55,12 +64,16 @@ class RiotService(object):
             self.throttle(exponential_level)
             self.logger.warning("Waiting for %.1f seconds", self.scale_delay(exponential_level))
             response = requests.get(full_url, params=self.params)
+            self.num_requests += 1
 
         response.raise_for_status()
         data = response.json()
+
+        self.heartbeat()
         return data
 
     def get_match(self, match_id):
+        self.request_types["match"] += 1
         return self.request("v2.2/match/{}".format(match_id))
 
     def get_champion_info(self, champion_id):
@@ -85,6 +98,9 @@ class RiotService(object):
     def scale_delay(self, delay_level):
         return self.delay_seconds * 10 ** delay_level
 
+    def heartbeat(self):
+        self.heartbeat_logger.info("Made %d requests from the following high-level types: %s", self.num_requests, self.request_types.most_common())
+
     def throttle(self, delay_level=0):
         scaled_delay_seconds = self.scale_delay(delay_level)
         if self.most_recent_request and time.clock() - self.most_recent_request < scaled_delay_seconds:
@@ -102,13 +118,16 @@ class RiotService(object):
             return "Unknown, " + team_id
 
     def get_summoner_ranked_stats(self, summoner_id):
+        self.request_types["stats/by-summoner"] += 1
         return self.request("v1.3/stats/by-summoner/{summonerId}/ranked".format(summonerId=summoner_id))
 
     def get_summoner_id(self, summoner_name):
+        self.request_types["summoner/by-name"] += 1
         return self.request("v1.4/summoner/by-name/{}".format(summoner_name)).values()[0]["id"]
 
     def get_summoner(self, name=None, id=None):
         if name:
+            self.request_types["summoner/by-name"] += 1
             return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
         else:
             return None
@@ -125,13 +144,16 @@ class RiotService(object):
 
             self.logger.info("Requesting summoners {}".format(ids))
             data = self.request("v1.4/summoner/{}".format(",".join([str(x) for x in ids])))
+            self.request_types["summoner"] += 1
         else:
             data = self.request("v1.4/summoner/by-name/{}".format(",".join(names)))
+            self.request_types["summoner/by-name"] += 1
 
         return [Summoner(s) for s in data.itervalues()]
 
     def get_featured_matches(self):
         data = self.request("featured", self.observer_base_url)
+        self.request_types["featured"] += 1
         return data["gameList"], data["clientRefreshInterval"]
 
     def get_match_history(self, summoner_id):
@@ -139,6 +161,7 @@ class RiotService(object):
             raise ValueError("summoner_id must be a valid int")
 
         data = self.request("v2.2/matchhistory/{}".format(summoner_id))
+        self.request_types["matchhistory"] += 1
 
         if data:
             for match in data["matches"]:
@@ -170,11 +193,11 @@ class FeaturedParticipant:
 
     @staticmethod
     def from_joined(data):
-        return FeaturedParticipant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"],
-                                   data["summonerName"])
+        return FeaturedParticipant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["summonerName"])
 
     @staticmethod
     def parse_participants(participants, participant_identities):
+        # logging.getLogger(__name__).info("Parsing participants from\n{}\n{}".format(participants, participant_identities))
         for player, identity in zip(participants, participant_identities):
             yield FeaturedParticipant.from_split(player, identity)
 
