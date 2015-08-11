@@ -1,11 +1,11 @@
 from __future__ import unicode_literals
 import ConfigParser
 import argparse
-import collections
 import math
 import sys
 
 from riot_api import *
+from src.riot_data import Participant
 
 
 def parse_args():
@@ -33,7 +33,7 @@ def main():
 
         for player in game["participants"]:
             # print "{} team: {}".format(connection.get_team_name(player["teamId"]), player["summonerName"])
-            player = FeaturedParticipant(player)
+            player = Participant(player)
             champion_name = connection.get_champion_info(player.championId)["name"]
 
             try:

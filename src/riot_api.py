@@ -1,13 +1,11 @@
 from __future__ import unicode_literals
 import collections
 import logging
-import pprint
 import time
 import urlparse
-import math
 
 import requests
-from riot_data import Summoner
+from riot_data import Summoner, Match
 import utilities
 
 # error codes that happen cause a server is temporarily down/etc
@@ -137,12 +135,15 @@ class RiotService(object):
 
         if ids:
             if None in ids:
-                self.logger.warn("Empty IDs in list")
                 ids = [i for i in ids if i]
-                if not i:
+                if not ids:
+                    self.logger.warn("List is entirely empty IDs")
                     return []
+                else:
+                    self.logger.warn("Empty IDs in list")
 
-            self.logger.info("Requesting summoners {}".format(ids))
+
+            self.logger.debug("Requesting summoners {}".format(ids))
             data = self.request("v1.4/summoner/{}".format(",".join([str(x) for x in ids])))
             self.request_types["summoner"] += 1
         else:
@@ -166,45 +167,6 @@ class RiotService(object):
         if data:
             for match in data["matches"]:
                 yield Match(match)
-
-
-class Match(object):
-    def __init__(self, data):
-        self.id = data["matchId"]
-        self.mode = data["matchMode"]
-        self.type = data["matchType"]
-        self.creation_time = data["matchCreation"]
-        self.duration = data["matchDuration"]
-        self.queue_type = data["queueType"]
-        self.version = data["matchVersion"]
-
-        self.players = list(FeaturedParticipant.parse_participants(data["participants"], data["participantIdentities"]))
-
-
-class FeaturedParticipant:
-    def __init__(self, team_id, spells, champion_id, name, id=None):
-        assert len(spells) == 2
-
-        self.teamId = team_id
-        self.spells = spells
-        self.championId = champion_id
-        self.name = name
-        self.id = None
-
-    @staticmethod
-    def from_joined(data):
-        return FeaturedParticipant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["summonerName"])
-
-    @staticmethod
-    def parse_participants(participants, participant_identities):
-        # logging.getLogger(__name__).info("Parsing participants from\n{}\n{}".format(participants, participant_identities))
-        for player, identity in zip(participants, participant_identities):
-            yield FeaturedParticipant.from_split(player, identity)
-
-    @staticmethod
-    def from_split(player, identity):
-        return FeaturedParticipant(player["teamId"], [player["spell1Id"], player["spell2Id"]], player["championId"],
-                                   identity["player"]["summonerName"], id=identity["player"]["summonerId"])
 
 
 

@@ -21,6 +21,9 @@ PLAYER_COLLECTION = "summoners"
 
 
 class Envelope(object):
+    """
+    Wraps API data with metadata such as whether it's a queued identifier, when it was last updated, and so on.
+    """
     def __init__(self, data, is_queued, last_updated):
         self.data = data
         self.is_queued = is_queued
@@ -63,9 +66,11 @@ class ApiCache(object):
             self.logger.debug("Queueing match %d", id)
             self.new_matches[True] += 1
             self.matches.insert_one(Envelope.wrap({"matchId": id}))
+            return True
         else:
             self.new_matches[False] += 1
             self.logger.debug("Already queued match %d", id)
+            return False
 
     def queue_player_id(self, id):
         if not id:
@@ -81,18 +86,18 @@ class ApiCache(object):
             self.new_matches[False] += 1
             self.logger.debug("Already queued player %d", id)
 
-    def get_queued(self, collection):
-        for item in collection.find(Envelope.query_queued(True)):
+    def get_queued(self, collection, max_records):
+        for item in collection.find(Envelope.query_queued(True)).limit(max_records):
             yield item
 
-    def get_players(self):
-        for player_data in self.players.find(Envelope.query_queued(True)):
+    def get_players(self, max_records):
+        for player_data in self.players.find(Envelope.query_queued(True)).limit(max_records):
             yield Summoner(Envelope.unwrap(player_data).data)
 
     def update_players(self, players):
         for player in players:
             assert isinstance(player, Summoner)
-            self.logger.info("Updating %d -> %s", player.id, player.name)
+            self.logger.debug("Updating %d -> %s", player.id, player.name)
             self.players.update(Envelope.query_data({"id": player.id}), Envelope.wrap(player.export(), False))
 
     def update_match(self, match):
