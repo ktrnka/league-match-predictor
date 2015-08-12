@@ -113,7 +113,7 @@ class ApiCache(object):
         assert isinstance(player, Summoner)
 
         result = self.players.delete_one(Envelope.query_data({"id": player.id}))
-        self.logger.info("Removed %d objects for player id %d", result.deleted_count, player.id)
+        self.logger.info("Removed %d objects for player {}".format(player), result.deleted_count)
 
     def log_summary(self):
         self.logger.info("New matches added: %.1f%% of queries (%d)",
