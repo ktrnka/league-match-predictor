@@ -97,7 +97,8 @@ class RiotService(object):
         return self.delay_seconds * 10 ** delay_level
 
     def heartbeat(self):
-        self.heartbeat_logger.info("Made %d requests from the following high-level types: %s", self.num_requests, self.request_types.most_common())
+        request_types = ", ".join("{}: {:,}".format(k, v) for k, v in self.request_types.most_common())
+        self.heartbeat_logger.info("Made %d requests from the following high-level types: %s", self.num_requests, request_types)
 
     def throttle(self, delay_level=0):
         scaled_delay_seconds = self.scale_delay(delay_level)
