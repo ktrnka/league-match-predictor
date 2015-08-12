@@ -57,7 +57,7 @@ def update_summoners(riot_cache, riot_connection, queued_counts):
 def update_matches(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
-    max_matches = max(200, queued_counts["match"] * 2)
+    max_matches = max(600, queued_counts["match"] * 2)
     logger.info("Fetching queued matches, up to %d", max_matches)
 
     outcomes = collections.Counter()
