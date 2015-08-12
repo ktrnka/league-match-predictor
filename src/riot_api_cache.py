@@ -72,20 +72,22 @@ class ApiCache(object):
             self.logger.debug("Already queued match %d", id)
             return False
 
-    def queue_player_id(self, id):
-        if not id:
-            self.logger.error("ID is null")
+    def queue_player(self, player):
+        assert isinstance(player, Summoner)
+        if not player.id:
+            self.logger.error("ID is null: {}".format(player))
             return
-        player = self.players.find_one(Envelope.query_data({"id": id}))
 
-        if not player:
+        player_data = self.players.find_one(Envelope.query_data({"id": player.id}))
+
+        if not player_data:
             self.new_players[True] += 1
-            self.logger.debug("Queueing player %d", id)
-            self.players.insert_one(Envelope.wrap({"id": id}))
+            self.logger.debug("Queueing player %d", player.id)
+            self.players.insert_one(Envelope.wrap(player.export()))
             return True
         else:
-            self.new_matches[False] += 1
-            self.logger.debug("Already queued player %d", id)
+            self.new_players[False] += 1
+            self.logger.debug("Already queued player %d", player.id)
             return False
 
     def get_queued(self, collection, max_records):

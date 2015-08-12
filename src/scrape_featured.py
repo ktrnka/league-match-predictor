@@ -35,7 +35,7 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
         for player in match.players:
             summoner = riot_connection.get_summoner_by_name(player.name)
 
-            if riot_cache.queue_player_id(summoner.id):
+            if riot_cache.queue_player(summoner):
                 queued_counts["player"] += 1
 
 
@@ -73,7 +73,7 @@ def update_matches(riot_cache, riot_connection, queued_counts):
                 parsed_match = Match(match_info)
                 for player in parsed_match.players:
                     if player.id:
-                        if riot_cache.queue_player_id(player.id):
+                        if riot_cache.queue_player(player):
                             queued_counts["player"] += 1
                 outcomes["parsed match and added players"] += 1
             except KeyError:
