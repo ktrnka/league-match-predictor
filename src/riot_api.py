@@ -125,7 +125,7 @@ class RiotService(object):
         return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
 
     @staticmethod
-    def _filter_ids(id_list, list_name):
+    def _filter_ids(id_list):
         return [i for i in id_list if i]
 
     def get_summoners(self, ids=None, names=None):
