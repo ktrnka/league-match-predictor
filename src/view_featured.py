@@ -34,7 +34,7 @@ def main():
         for player in game["participants"]:
             # print "{} team: {}".format(connection.get_team_name(player["teamId"]), player["summonerName"])
             player = Participant(player)
-            champion_name = connection.get_champion_info(player.championId)["name"]
+            champion_name = connection.get_champion_info(player.champion_id)["name"]
 
             try:
                 # get summoner id
@@ -46,7 +46,7 @@ def main():
                 this_champ = collections.Counter()
                 for champion in summoner_data["champions"]:
                     overall.update(champion["stats"])
-                    if champion["id"] == player.championId:
+                    if champion["id"] == player.champion_id:
                         this_champ.update(champion["stats"])
 
                 try:
@@ -59,9 +59,9 @@ def main():
                 overall_win_rate = overall["totalSessionsWon"] / float(overall["totalSessionsPlayed"])
                 overall_conf_interval = z_score_target * math.sqrt(overall_win_rate * (1. - overall_win_rate) / (overall["totalSessionsPlayed"] + z_score_target ** 2))
 
-                print connection.get_team_name(player.teamId), player.name, champion_name, "{:.1f}% win rate +/- {:.1f}% ({:.1f}% +/- {:.1f}% overall)".format(100 * win_rate, 100 * conf_interval, 100 * overall_win_rate, 100 * overall_conf_interval)
+                print connection.get_team_name(player.team_id), player.name, champion_name, "{:.1f}% win rate +/- {:.1f}% ({:.1f}% +/- {:.1f}% overall)".format(100 * win_rate, 100 * conf_interval, 100 * overall_win_rate, 100 * overall_conf_interval)
             except requests.exceptions.HTTPError:
-                print connection.get_team_name(player.teamId), player.name, champion_name
+                print connection.get_team_name(player.team_id), player.name, champion_name
 
 
 if __name__ == "__main__":

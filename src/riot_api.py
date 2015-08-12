@@ -120,10 +120,6 @@ class RiotService(object):
         self.request_types["stats/by-summoner"] += 1
         return self.request("v1.3/stats/by-summoner/{summonerId}/ranked".format(summonerId=summoner_id))
 
-    def get_summoner_id(self, summoner_name):
-        self.request_types["summoner/by-name"] += 1
-        return self.request("v1.4/summoner/by-name/{}".format(summoner_name)).values()[0]["id"]
-
     def get_summoner_by_name(self, name):
         self.request_types["summoner/by-name"] += 1
         return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])

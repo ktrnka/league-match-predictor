@@ -34,9 +34,9 @@ class Participant:
     def __init__(self, team_id, spells, champion_id, name, id=None):
         assert len(spells) == 2
 
-        self.teamId = team_id
+        self.team_id = team_id
         self.spells = spells
-        self.championId = champion_id
+        self.champion_id = champion_id
         self.name = name
         self.id = None
 
