@@ -60,8 +60,8 @@ class Participant:
 
 
 class Match(object):
-    _QUEUE_RANKED_SOLO = "RANKED_SOLO_5x5"
-    _QUEUE_RANKED_5 = "RANKED_TEAM_5x5"
+    QUEUE_RANKED_SOLO = "RANKED_SOLO_5x5"
+    QUEUE_RANKED_5 = "RANKED_TEAM_5x5"
 
     def __init__(self, data):
         self.id = data["matchId"]
@@ -75,6 +75,9 @@ class Match(object):
         self.players = list(Participant.parse_participants(data["participants"], data["participantIdentities"]))
 
         self.full_data = data
+
+    def export(self):
+        return self.full_data
 
     @staticmethod
     def from_featured(data):

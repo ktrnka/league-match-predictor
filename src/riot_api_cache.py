@@ -5,7 +5,7 @@ import logging
 import sys
 import argparse
 import pymongo
-from riot_data import Summoner
+from riot_data import Summoner, Match
 
 _ENVELOPE_UPDATED_DATE = "updated"
 
@@ -59,17 +59,19 @@ class ApiCache(object):
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
 
-    def queue_match_id(self, id):
-        match = self.matches.find_one(Envelope.query_data({"matchId": id}))
+    def queue_match(self, match):
+        assert isinstance(match, Match)
 
-        if not match:
-            self.logger.debug("Queueing match %d", id)
+        match_data = self.matches.find_one(Envelope.query_data({"matchId": match.id}))
+
+        if not match_data:
+            self.logger.debug("Queueing match %d", match.id)
             self.new_matches[True] += 1
-            self.matches.insert_one(Envelope.wrap({"matchId": id}))
+            self.matches.insert_one(Envelope.wrap(match.export()))
             return True
         else:
+            self.logger.debug("Already queued match %d", match.id)
             self.new_matches[False] += 1
-            self.logger.debug("Already queued match %d", id)
             return False
 
     def queue_player(self, player):
@@ -93,6 +95,30 @@ class ApiCache(object):
     def get_queued(self, collection, max_records):
         for item in collection.find(Envelope.query_queued(True)).limit(max_records):
             yield item
+
+    def get_queued_matches(self, max_records):
+        # ranked 5v5
+        previous_max_records = max_records
+        for match_data in self.matches.find({"queued": True, "data.queueType": Match.QUEUE_RANKED_5}).limit(max_records):
+            yield match_data
+            max_records -= 1
+        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, Match.QUEUE_RANKED_5)
+
+        # solo 5v5
+        previous_max_records = max_records
+        if max_records > 0:
+            for match_data in self.matches.find({"queued": True, "data.queueType": Match.QUEUE_RANKED_SOLO}).limit(max_records):
+                yield match_data
+                max_records -= 1
+        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, Match.QUEUE_RANKED_SOLO)
+
+        # everything else
+        previous_max_records = max_records
+        if max_records > 0:
+            for match_data in self.matches.find({"queued": True, "data.queueType": {"$nin": [Match.QUEUE_RANKED_5, Match.QUEUE_RANKED_SOLO]}}).limit(max_records):
+                yield match_data
+                max_records -= 1
+        self.logger.info("Retrieved %d queued matches of other queue types", previous_max_records - max_records)
 
     def get_players(self, max_records):
         for player_data in self.players.find(Envelope.query_queued(True)).limit(max_records):

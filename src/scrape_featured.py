@@ -31,7 +31,7 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
     games, _ = riot_connection.get_featured_matches()
     for game_data in games:
         match = Match.from_featured(game_data)
-        if riot_cache.queue_match_id(match.id):
+        if riot_cache.queue_match(match):
             queued_counts["match"] += 1
 
         for player in match.players:
@@ -65,7 +65,7 @@ def update_matches(riot_cache, riot_connection, queued_counts):
 
     outcomes = collections.Counter()
 
-    for match in riot_cache.get_queued(riot_cache.matches, max_matches):
+    for match in riot_cache.get_queued_matches(max_matches):
         match_id = match["data"]["matchId"]
 
         try:
@@ -103,7 +103,7 @@ def queue_from_match_histories(riot_cache, riot_connection, queued_counts):
         try:
             matches = riot_connection.get_match_history(player.id)
             for match in matches:
-                if riot_cache.queue_match_id(match.id):
+                if riot_cache.queue_match(match):
                     queued_counts["match"] += 1
         except InvalidIdError:
             logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
