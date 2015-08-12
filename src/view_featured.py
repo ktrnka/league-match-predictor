@@ -38,7 +38,7 @@ def main():
 
             try:
                 # get summoner id
-                summoner = connection.get_summoner(name=player.name)
+                summoner = connection.get_summoner_by_name(player.name)
                 summoner_data = connection.get_summoner_ranked_stats(summoner.id)
 
                 # win rates

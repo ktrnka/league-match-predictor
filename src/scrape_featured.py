@@ -33,7 +33,7 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
             queued_counts["match"] += 1
 
         for player in match.players:
-            summoner = riot_connection.get_summoner(name=player.name)
+            summoner = riot_connection.get_summoner_by_name(player.name)
 
             if riot_cache.queue_player_id(summoner.id):
                 queued_counts["player"] += 1

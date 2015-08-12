@@ -124,12 +124,9 @@ class RiotService(object):
         self.request_types["summoner/by-name"] += 1
         return self.request("v1.4/summoner/by-name/{}".format(summoner_name)).values()[0]["id"]
 
-    def get_summoner(self, name=None, id=None):
-        if name:
-            self.request_types["summoner/by-name"] += 1
-            return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
-        else:
-            return None
+    def get_summoner_by_name(self, name):
+        self.request_types["summoner/by-name"] += 1
+        return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
 
     def get_summoners(self, ids=None, names=None):
         assert ids or names
