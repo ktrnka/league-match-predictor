@@ -17,7 +17,7 @@ HTTP_TRANSIENT_ERRORS = {500, 503}
 HTTP_HARD_ERRORS = {400, 401, 404, 422}
 
 # hit rate limit
-RATE_LIMIT_ERROR = 427
+RATE_LIMIT_ERROR = 429
 
 
 class RiotService(object):
@@ -56,7 +56,7 @@ class RiotService(object):
             return self.request(endpoint, base_url, tries_left=tries_left - 1)
 
         for exponential_level in xrange(1, 4):
-            if response.status_code == HTTP_OK:
+            if response.status_code != RATE_LIMIT_ERROR:
                 break
 
             self.throttle(exponential_level)
