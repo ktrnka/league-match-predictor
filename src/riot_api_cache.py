@@ -105,6 +105,16 @@ class ApiCache(object):
     def update_match(self, match):
         self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.wrap(match, False))
 
+    def remove_match(self, match_id):
+        result = self.matches.delete_one(Envelope.query_data({"matchId": match_id}))
+        self.logger.info("Removed %d objects for match id %d", result.deleted_count, match_id)
+
+    def remove_player(self, player):
+        assert isinstance(player, Summoner)
+
+        result = self.players.delete_one(Envelope.query_data({"id": player.id}))
+        self.logger.info("Removed %d objects for player id %d", result.deleted_count, player.id)
+
     def log_summary(self):
         self.logger.info("New matches added: %.1f%% of queries (%d)",
                          100. * self.new_matches[True] / (self.new_matches[True] + self.new_matches[False]),

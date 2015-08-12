@@ -159,7 +159,7 @@ class RiotService(object):
 
     def get_match_history(self, summoner_id):
         if not summoner_id or not isinstance(summoner_id, int):
-            raise ValueError("summoner_id must be a valid int")
+            raise InvalidIdError("summoner_id must be a valid int")
 
         data = self.request("v2.2/matchhistory/{}".format(summoner_id))
         self.request_types["matchhistory"] += 1
@@ -168,5 +168,5 @@ class RiotService(object):
             for match in data["matches"]:
                 yield Match(match)
 
-
-
+class InvalidIdError(ValueError):
+    pass

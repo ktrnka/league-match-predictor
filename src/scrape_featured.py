@@ -6,6 +6,7 @@ import sys
 from riot_api import *
 from riot_api_cache import ApiCache
 from riot_data import Participant, Match
+import requests.exceptions
 
 
 def parse_args():
@@ -78,8 +79,11 @@ def update_matches(riot_cache, riot_connection, queued_counts):
             except KeyError:
                 # not all games have player identity info so skip if it fails
                 outcomes["failed to parse match data"] += 1
-        except requests.exceptions.HTTPError:
+        except requests.exceptions.HTTPError as e:
             logger.exception("Something went wrong in updating %d", match_id)
+
+            if e.response.status_code == 404:
+                riot_cache.remove_match(match_id)
 
     logger.info("Outcomes from fetching queued matches: %s", outcomes.most_common())
 
@@ -98,8 +102,9 @@ def queue_from_match_histories(riot_cache, riot_connection, queued_counts):
             for match in matches:
                 if riot_cache.queue_match_id(match.id):
                     queued_counts["match"] += 1
-        except ValueError:
-            logging.getLogger(__name__).error("Bad summoner ID for player %s", player)
+        except InvalidIdError:
+            logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
+            riot_cache.remove_player(player)
 
 
 def main():
