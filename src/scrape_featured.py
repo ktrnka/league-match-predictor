@@ -26,6 +26,8 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
     logger.info("Fetching featured matches and queueing matches and players")
 
+    summoner_names = []
+
     games, _ = riot_connection.get_featured_matches()
     for game_data in games:
         match = Match.from_featured(game_data)
@@ -33,10 +35,15 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
             queued_counts["match"] += 1
 
         for player in match.players:
-            summoner = riot_connection.get_summoner_by_name(player.name)
+            summoner_names.append(player.name)
+            # summoner = riot_connection.get_summoner_by_name(player.name)
+            #
+            # if riot_cache.queue_player(summoner):
+            #     queued_counts["player"] += 1
 
-            if riot_cache.queue_player(summoner):
-                queued_counts["player"] += 1
+    for player_names in chunks(summoner_names, 40):
+        players = riot_connection.get_summoners(names=player_names)
+        riot_cache.update_players(players)
 
 
 def update_summoners(riot_cache, riot_connection, queued_counts):

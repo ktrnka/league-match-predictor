@@ -128,23 +128,26 @@ class RiotService(object):
         self.request_types["summoner/by-name"] += 1
         return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
 
+    @staticmethod
+    def _filter_ids(id_list, list_name):
+        return [i for i in id_list if i]
+
     def get_summoners(self, ids=None, names=None):
+        """Batch requesting info by id or name"""
         assert ids or names
 
         if ids:
-            if None in ids:
-                ids = [i for i in ids if i]
-                if not ids:
-                    self.logger.warn("List is entirely empty IDs")
-                    return []
-                else:
-                    self.logger.warn("Empty IDs in list")
-
+            ids = self._filter_ids(ids)
+            assert ids
 
             self.logger.debug("Requesting summoners {}".format(ids))
             data = self.request("v1.4/summoner/{}".format(",".join([str(x) for x in ids])))
             self.request_types["summoner"] += 1
         else:
+            names = self._filter_ids(names)
+            assert names
+
+            self.logger.debug("Requesting summoners {}".format(names))
             data = self.request("v1.4/summoner/by-name/{}".format(",".join(names)))
             self.request_types["summoner/by-name"] += 1
 
