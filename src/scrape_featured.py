@@ -27,12 +27,12 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
     logger.info("Fetching featured matches and queueing matches and players")
 
     games, _ = riot_connection.get_featured_matches()
-    for game in games:
-        if riot_cache.queue_match_id(game["gameId"]):
+    for game_data in games:
+        match = Match.from_featured(game_data)
+        if riot_cache.queue_match_id(match.id):
             queued_counts["match"] += 1
 
-        for player in game["participants"]:
-            player = Participant.from_joined(player)
+        for player in match.players:
             summoner = riot_connection.get_summoner(name=player.name)
 
             if riot_cache.queue_player_id(summoner.id):
