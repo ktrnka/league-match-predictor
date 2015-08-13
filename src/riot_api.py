@@ -20,6 +20,15 @@ HTTP_HARD_ERRORS = {400, 401, 404, 422}
 RATE_LIMIT_ERROR = 429
 
 
+def _merge_params(params, additional_params):
+    if not additional_params:
+        return params
+
+    params = params.copy()
+    params.update(additional_params)
+    return params
+
+
 class RiotService(object):
     def __init__(self, base_url, static_base_url, observer_base_url, api_key):
         self.base_url = base_url
@@ -43,17 +52,18 @@ class RiotService(object):
         return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"),
                            config_parser.get("riot", "observer_base"), config_parser.get("riot", "api_key"))
 
-    def request(self, endpoint, base_url=None, tries_left=1):
+    def request(self, endpoint, base_url=None, tries_left=1, additional_params=None):
+        params = _merge_params(self.params, additional_params)
         self.throttle()
         full_url = urlparse.urljoin(base_url or self.base_url, endpoint)
-        response = requests.get(full_url, params=self.params)
+        response = requests.get(full_url, params=params)
         self.num_requests += 1
 
         if response.status_code != HTTP_OK:
             self.logger.error("Request %s error code %d", full_url, response.status_code)
 
         if response.status_code in HTTP_TRANSIENT_ERRORS and tries_left > 0:
-            return self.request(endpoint, base_url, tries_left=tries_left - 1)
+            return self.request(endpoint, base_url, tries_left=tries_left - 1, additional_params=additional_params)
 
         for exponential_level in xrange(1, 4):
             if response.status_code != RATE_LIMIT_ERROR:
@@ -61,7 +71,7 @@ class RiotService(object):
 
             self.throttle(exponential_level)
             self.logger.warning("Waiting for %.1f seconds", self.scale_delay(exponential_level))
-            response = requests.get(full_url, params=self.params)
+            response = requests.get(full_url, params=params)
             self.num_requests += 1
 
         response.raise_for_status()
@@ -158,7 +168,7 @@ class RiotService(object):
         if not summoner_id or not isinstance(summoner_id, int):
             raise InvalidIdError("summoner_id must be a valid int")
 
-        data = self.request("v2.2/matchhistory/{}".format(summoner_id))
+        data = self.request("v2.2/matchhistory/{}".format(summoner_id), additional_params={"endIndex": 15})
         self.request_types["matchhistory"] += 1
 
         if data:

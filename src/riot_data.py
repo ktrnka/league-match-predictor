@@ -1,6 +1,8 @@
 from __future__ import unicode_literals
+import pprint
 import sys
 import argparse
+import datetime
 
 
 def parse_args():
@@ -58,6 +60,17 @@ class Participant:
         return Participant(player["teamId"], [player["spell1Id"], player["spell2Id"]], player["championId"],
                                    identity["player"]["summonerName"], id=identity["player"]["summonerId"])
 
+class Queue(object):
+    id_to_name = {
+        4: "RANKED_SOLO_5x5",
+        42: "RANKED_TEAM_5x5"
+    }
+
+    @staticmethod
+    def to_name(queue_id):
+        assert isinstance(queue_id, int)
+
+        return Queue.id_to_name.get(queue_id, unicode(queue_id))
 
 class Match(object):
     QUEUE_RANKED_SOLO = "RANKED_SOLO_5x5"
@@ -79,10 +92,17 @@ class Match(object):
     def export(self):
         return self.full_data
 
+    def get_creation_datetime(self):
+        # The creation time from API is milliseconds since the epoch not seconds
+        # And it's pacific time not UTC
+        return datetime.datetime.fromtimestamp(self.creation_time / 1000.)
+
     @staticmethod
     def from_featured(data):
         """Parse a partial Match object from a featured match"""
         assert isinstance(data, dict)
+
+        # pprint.pprint(["Featured match data", data])
 
         wrapped_data = dict()
         wrapped_data["matchId"] = data["gameId"]
@@ -90,7 +110,7 @@ class Match(object):
         wrapped_data["matchType"] = data["gameType"]
         wrapped_data["matchCreation"] = data["gameStartTime"]
         wrapped_data["matchDuration"] = data["gameLength"]  # note that this is partial only
-        wrapped_data["queueType"] = data["gameQueueConfigId"]
+        wrapped_data["queueType"] = Queue.to_name(data["gameQueueConfigId"])
         wrapped_data["matchVersion"] = -1
 
         # note that there's no identity information in featured mode

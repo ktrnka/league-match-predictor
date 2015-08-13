@@ -1,12 +1,16 @@
 from __future__ import unicode_literals
 import ConfigParser
 import argparse
+import pprint
 import sys
+import datetime
 
 from riot_api import *
 from riot_api_cache import ApiCache
 from riot_data import Participant, Match
 import requests.exceptions
+
+EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 
 def parse_args():
@@ -31,6 +35,9 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
     games, _ = riot_connection.get_featured_matches()
     for game_data in games:
         match = Match.from_featured(game_data)
+
+        logger.info("Match creation time: %s", match.get_creation_datetime().strftime("%Y-%m-%d %H:%M:%S"))
+
         if riot_cache.queue_match(match):
             queued_counts["match"] += 1
 
@@ -91,20 +98,39 @@ def update_matches(riot_cache, riot_connection, queued_counts):
     logger.info("Outcomes from fetching queued matches: %s", outcomes.most_common())
 
 
+def get_recrawl_date(matches):
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    dates = [match.get_creation_datetime() for match in matches]
+    rate = (max(dates) - min(dates)) / len(dates)
+    recrawl = max(dates) + rate * 15
+    logging.getLogger(__name__).debug("%d matches from %s to %s, setting recrawl date to %s",
+                                     len(matches),
+                                     min(dates).strftime(date_format),
+                                     max(dates).strftime(date_format),
+                                     recrawl.strftime(date_format)
+    )
+    return (recrawl - EPOCH).total_seconds()
+
+
 def queue_from_match_histories(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
     max_players = max(100, queued_counts["player"] * 2)
     logger.info("Fetching match history for queued summoners, up to %d", max_players)
 
-    for player in riot_cache.get_players(max_players):
+    for player in riot_cache.get_players_recrawl(max_players):
         assert isinstance(player, Summoner)
 
         try:
-            matches = riot_connection.get_match_history(player.id)
+            matches = list(riot_connection.get_match_history(player.id))
             for match in matches:
                 if riot_cache.queue_match(match):
                     queued_counts["match"] += 1
+
+            if matches:
+                riot_cache.update_match_history_refresh(player, get_recrawl_date(matches))
+
         except InvalidIdError:
             logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
             riot_cache.remove_player(player)
@@ -131,11 +157,13 @@ def main():
 
     try:
         queued_counts = collections.Counter()
-        queue_featured(riot_cache, riot_connection, queued_counts)
-        queue_from_match_histories(riot_cache, riot_connection, queued_counts)
 
+        queue_from_match_histories(riot_cache, riot_connection, queued_counts)
         update_summoners(riot_cache, riot_connection, queued_counts)
         update_matches(riot_cache, riot_connection, queued_counts)
+
+        # queue up featured matches last because they will automatically fail to get match data for a while
+        queue_featured(riot_cache, riot_connection, queued_counts)
 
         logger.info("Found %d new players, %d new matches", queued_counts["player"], queued_counts["match"])
     except requests.exceptions.HTTPError as exc:

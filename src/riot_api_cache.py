@@ -43,7 +43,7 @@ class Envelope(object):
 
     @staticmethod
     def query_data(data_query):
-        return {_ENVELOPE_DATA: data_query}
+        return {"data.{}".format(k): v for k, v in data_query.iteritems()}
 
 
 class ApiCache(object):
@@ -120,15 +120,32 @@ class ApiCache(object):
                 max_records -= 1
         self.logger.info("Retrieved %d queued matches of other queue types", previous_max_records - max_records)
 
-    def get_players(self, max_records):
-        for player_data in self.players.find(Envelope.query_queued(True)).limit(max_records):
+    def get_players_recrawl(self, max_records):
+        """Get an iterable of players to recrawl for match history or other purposes"""
+        previous_max_records = max_records
+        for player_data in self.players.find({"recrawl_at": None}).limit(max_records):
             yield Summoner(Envelope.unwrap(player_data).data)
+            max_records -= 1
+        self.logger.info("%d players without recrawl specified", previous_max_records - max_records)
+
+        if max_records > 0:
+            previous_max_records = max_records
+            for player_data in self.players.find({"recrawl_at": {"$ne": None}}).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
+                yield Summoner(Envelope.unwrap(player_data).data)
+                max_records -= 1
+            self.logger.info("%d players selected from earliest recrawl dates", previous_max_records - max_records)
+
+
 
     def update_players(self, players):
         for player in players:
             assert isinstance(player, Summoner)
             self.logger.debug("Updating %d -> %s", player.id, player.name)
             self.players.update(Envelope.query_data({"id": player.id}), Envelope.wrap(player.export(), False))
+
+    def update_match_history_refresh(self, player, recrawl_date):
+        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
+        self.logger.debug("Updated %d match hist refresh for id %d", result["nModified"], player.id)
 
     def update_match(self, match):
         self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.wrap(match, False))
@@ -145,10 +162,10 @@ class ApiCache(object):
 
     def log_summary(self):
         self.logger.info("New matches added: %.1f%% of queries (%d)",
-                         100. * self.new_matches[True] / (self.new_matches[True] + self.new_matches[False]),
+                         100. * self.new_matches[True] / (self.new_matches[True] + self.new_matches[False] + 1),
                          self.new_matches[True])
         self.logger.info("New players added: %.1f%% of queries (%d)",
-                         100. * self.new_players[True] / (self.new_players[True] + self.new_players[False]),
+                         100. * self.new_players[True] / (self.new_players[True] + self.new_players[False] + 1),
                          self.new_players[True])
 
     def summarize(self):
