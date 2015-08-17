@@ -103,6 +103,17 @@ class Match(object):
             if team["winner"]:
                 return team["teamId"]
 
+    def get_picks(self):
+        """
+        Get the champions picked for each side
+        :return: Mapping of team IDs to of sets of champion IDs
+        """
+        picks = collections.defaultdict(set)
+        for player in self.full_data["participants"]:
+            picks[player["teamId"]].add(player["championId"])
+
+        return picks
+
     def get_average_tier(self):
         """Get the most common tier among the participants. Doesn't do any fancy averaging. Returns a string."""
         tiers = [player["highestAchievedSeasonTier"] for player in self.full_data["participants"]]

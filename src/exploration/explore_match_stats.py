@@ -48,6 +48,24 @@ def explore_side(riot_cache):
             for team_id, win_count in tier_stats[tier].iteritems():
                 print "\t\t{} team: {:.1f}% of {:,} matches won".format(RiotService.get_team_name(team_id), 100. * win_count / total_matches, total_matches)
 
+def explore_champions(riot_cache, riot_connection):
+
+    victor_counts = collections.Counter()
+    played_counts = collections.Counter()
+
+    for match in riot_cache.get_matches():
+        winner = match.get_winning_team_id()
+
+        for team_id, champion_set in match.get_picks().iteritems():
+            played_counts.update(champion_set)
+
+            if team_id == winner:
+                victor_counts.update(champion_set)
+
+    champion_names = {i: riot_connection.get_champion_info(i)["name"] for i in played_counts.iterkeys()}
+
+    for champion_id in sorted(played_counts.iterkeys(), key=lambda i: float(victor_counts[i]) / played_counts[i]):
+        print "{}: {:.1f}% win rate out of {:,} games played".format(champion_names[champion_id], 100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
 
 def main():
     args = scrape_featured.parse_args()
@@ -66,8 +84,10 @@ def main():
     config.read([args.config])
 
     riot_cache = ApiCache(config)
+    riot_connection = RiotService.from_config(config)
 
     explore_side(riot_cache)
+    explore_champions(riot_cache, riot_connection)
 
 
 
