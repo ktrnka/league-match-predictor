@@ -36,8 +36,6 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
     for game_data in games:
         match = Match.from_featured(game_data)
 
-        logger.info("Match creation time: %s", match.get_creation_datetime().strftime("%Y-%m-%d %H:%M:%S"))
-
         if riot_cache.queue_match(match):
             queued_counts["match"] += 1
 
@@ -166,6 +164,8 @@ def main():
         queue_featured(riot_cache, riot_connection, queued_counts)
 
         logger.info("Found %d new players, %d new matches", queued_counts["player"], queued_counts["match"])
+
+        riot_cache.compact()
     except requests.exceptions.HTTPError as exc:
         logger.exception("Unhandled HTTPError, aborting")
 

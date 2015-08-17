@@ -112,14 +112,6 @@ class ApiCache(object):
                 max_records -= 1
         self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, Match.QUEUE_RANKED_SOLO)
 
-        # everything else
-        previous_max_records = max_records
-        if max_records > 0:
-            for match_data in self.matches.find({"queued": True, "data.queueType": {"$nin": [Match.QUEUE_RANKED_5, Match.QUEUE_RANKED_SOLO]}}).limit(max_records):
-                yield match_data
-                max_records -= 1
-        self.logger.info("Retrieved %d queued matches of other queue types", previous_max_records - max_records)
-
     def get_players_recrawl(self, max_records):
         """Get an iterable of players to recrawl for match history or other purposes"""
         previous_max_records = max_records
@@ -176,8 +168,21 @@ class ApiCache(object):
         return """
         {:,} players queued ({:.1f}% of {:,})
         {:,} matches queued ({:.1f}% of {:,})
-        """.format(players_queued, 100. * players_queued / players_total, players_total, matches_queued,
-                   100. * matches_queued / matches_total, matches_total)
+        """.format(players_queued,
+                   100. * players_queued / players_total,
+                   players_total,
+                   matches_queued,
+                   100. * matches_queued / matches_total,
+                   matches_total)
+
+    def compact(self):
+        # remove any matches from queues we don't care about
+        result = self.matches.remove({"data.queueType": {"$nin": [Match.QUEUE_RANKED_5, Match.QUEUE_RANKED_SOLO]}})
+        self.logger.info("Result from removing matches from queues we don't care about: %s", result)
+
+        result = self.matches.update(Envelope.query_queued(False), {"$unset": make_unset()}, multi=True)
+        self.logger.info("Result from pruning detail fields: %s", result)
+
 
 
 def parse_args():
@@ -191,3 +196,13 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def make_unset():
+    """Make the proper dict of fields to unset from the match collection"""
+    fields = []
+    for i in xrange(0, 10):
+        for field in "stats runes masteries timeline".split():
+            fields.append("data.participants.{}.{}".format(i, field))
+
+    return {k: None for k in fields}
