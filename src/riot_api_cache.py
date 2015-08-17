@@ -183,6 +183,9 @@ class ApiCache(object):
         result = self.matches.update(Envelope.query_queued(False), {"$unset": make_unset()}, multi=True)
         self.logger.info("Result from pruning detail fields: %s", result)
 
+    def get_matches(self):
+        for match_data in self.matches.find(Envelope.query_queued(False)):
+            yield Match(match_data["data"])
 
 
 def parse_args():

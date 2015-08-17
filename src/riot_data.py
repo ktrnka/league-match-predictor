@@ -3,6 +3,7 @@ import pprint
 import sys
 import argparse
 import datetime
+import collections
 
 
 def parse_args():
@@ -17,6 +18,14 @@ def main():
 if __name__ == "__main__":
     sys.exit(main())
 
+
+class Tier(object):
+    _tiers = ["CHALLENGER", "MASTER", "DIAMOND", "PLATINUM", "GOLD", "SILVER", "BRONZE", "UNRANKED"]
+    _indexes = {tier: i for i, tier in enumerate(_tiers)}
+
+    @staticmethod
+    def make_sortable_key(tier_label):
+        return Tier._indexes.get(tier_label)
 
 class Summoner:
     def __init__(self, data):
@@ -88,6 +97,18 @@ class Match(object):
         self.players = list(Participant.parse_participants(data["participants"], data["participantIdentities"]))
 
         self.full_data = data
+
+    def get_winning_team_id(self):
+        for team in self.full_data["teams"]:
+            if team["winner"]:
+                return team["teamId"]
+
+    def get_average_tier(self):
+        """Get the most common tier among the participants. Doesn't do any fancy averaging. Returns a string."""
+        tiers = [player["highestAchievedSeasonTier"] for player in self.full_data["participants"]]
+        tier_counts = collections.Counter(tiers)
+
+        return tier_counts.most_common(1)[0][0]
 
     def export(self):
         return self.full_data
