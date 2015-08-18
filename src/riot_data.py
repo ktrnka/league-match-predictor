@@ -20,12 +20,22 @@ if __name__ == "__main__":
 
 
 class Tier(object):
-    _tiers = ["CHALLENGER", "MASTER", "DIAMOND", "PLATINUM", "GOLD", "SILVER", "BRONZE", "UNRANKED"]
+    _tiers = ["CHALLENGER", "MASTER", "DIAMOND", "PLATINUM", "GOLD", "SILVER", "UNRANKED", "BRONZE"]
     _indexes = {tier: i for i, tier in enumerate(_tiers)}
 
     @staticmethod
     def make_sortable_key(tier_label):
         return Tier._indexes.get(tier_label)
+
+    @staticmethod
+    def mean_level(tiers):
+        return sum(Tier._indexes[tier] for tier in tiers) / len(tiers)
+
+
+
+class Champion(object):
+    known_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 48, 50, 51, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 67, 68, 69, 72, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 89, 90, 91, 92, 96, 98, 99, 101, 102, 103, 104, 105, 106, 107, 110, 111, 112, 113, 114, 115, 117, 119, 120, 121, 122, 126, 127, 131, 133, 134, 143, 150, 154, 157, 161, 201, 222, 223, 236, 238, 245, 254, 266, 267, 268, 412, 421, 429, 432]
+
 
 class Summoner:
     def __init__(self, data):
@@ -113,6 +123,13 @@ class Match(object):
             picks[player["teamId"]].add(player["championId"])
 
         return picks
+
+    def get_team_tiers_numeric(self):
+        team_tiers = collections.defaultdict(set)
+        for player in self.full_data["participants"]:
+            team_tiers[player["teamId"]].add(player["highestAchievedSeasonTier"])
+
+        return {team_id: Tier.mean_level(tiers) for team_id, tiers in team_tiers.items()}
 
     def get_average_tier(self):
         """Get the most common tier among the participants. Doesn't do any fancy averaging. Returns a string."""
