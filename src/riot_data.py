@@ -29,7 +29,7 @@ class Tier(object):
 
     @staticmethod
     def mean_level(tiers):
-        return sum(Tier._indexes[tier] for tier in tiers) / len(tiers)
+        return sum(Tier._indexes[tier] for tier in tiers) / float(len(tiers))
 
 
 
