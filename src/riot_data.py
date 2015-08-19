@@ -124,6 +124,22 @@ class Match(object):
 
         return picks
 
+    def get_picks_role(self):
+        """
+        Get array of champions picked for each side in order of participant ID.
+        TODO: This should eventually be sorted by TOP, MID, etc.
+        :return: dict of team ids mapped to list of champion ids
+        """
+        picks = collections.defaultdict(list)
+        for player in self.full_data["participants"]:
+            picks[player["teamId"]].append(player)
+
+        for team_id in picks.keys():
+            picks[team_id] = sorted(picks[team_id], key=lambda p: p["participantId"])
+            picks[team_id] = [p["championId"] for p in picks[team_id]]
+
+        return picks
+
     def get_team_tiers_numeric(self):
         team_tiers = collections.defaultdict(set)
         for player in self.full_data["participants"]:
