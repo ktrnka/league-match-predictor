@@ -70,6 +70,7 @@ def parse_args():
     parser.add_argument("--forest", default=False, action="store_true", help="Experiments with random forests")
     parser.add_argument("--logistic", default=False, action="store_true", help="Experiments with logistic regression")
     parser.add_argument("--xg", default=False, action="store_true", help="Experiments with gradient boosting trees")
+    parser.add_argument("--elastic", default=False, action="store_true", help="Experiments with elastic nets")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -93,7 +94,7 @@ def random_forest(X, y, data, split_iterator):
 def logistic_regression(X, y, split_iterator):
     logistic = sklearn.linear_model.LogisticRegression()
     hyperparameter_space = {
-        "C": [0.01, 0.1, 1., 10.],
+        "C": [0.005, 0.01, 0.02, 0.1, 1.],
         "penalty": ["l2"]
     }
 
@@ -103,13 +104,25 @@ def logistic_regression(X, y, split_iterator):
     print "Logistic regression"
     print_tuning_scores(grid_search)
 
+def elastic_net(X, y):
+    # note that GridSearchCV doesn't work with ElasticNet; need to use ElasticNetCV to select alpha and such
+    train_X, test_X, train_y, test_y = sklearn.cross_validation.train_test_split(X, y, test_size=0.1, random_state=4)
+    splits = sklearn.cross_validation.StratifiedShuffleSplit(train_y, 10)
+
+    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=-1, cv=splits, n_alphas=100)
+    grid_search.fit(train_X, train_y)
+
+    print "Elastic net on testing data", grid_search.score(test_X, test_y)
+    print "Elastic net on training data", grid_search.score(train_X, train_y)
+
+
 
 def gradient_boosting_exp(X, y, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
-        "learning_rate": [0.05, 0.1],
+        "learning_rate": [0.2],
         "max_depth": [3],
-        # "min_samples_leaf": [1, 10, 20],
+        "min_samples_leaf": [1, 10, 20],
         # "subsample": [0.8, 0.9, 1.]
     }
 
@@ -129,16 +142,19 @@ def main():
     X = data.values[:, :-1]
     y = data.values[:, -1]
 
-    split_iterator = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
+    cross_val_splits = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
 
     if args.forest:
-        random_forest(X, y, data, split_iterator)
+        random_forest(X, y, data, cross_val_splits)
 
     if args.logistic:
-        logistic_regression(X, y, split_iterator)
+        logistic_regression(X, y, cross_val_splits)
+
+    if args.elastic:
+        elastic_net(X, y)
 
     if args.xg:
-        gradient_boosting_exp(X, y, split_iterator)
+        gradient_boosting_exp(X, y, cross_val_splits)
 
 
 if __name__ == "__main__":
