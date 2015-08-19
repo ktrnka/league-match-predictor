@@ -127,13 +127,35 @@ class ApiCache(object):
                 max_records -= 1
             self.logger.info("%d players selected from earliest recrawl dates", previous_max_records - max_records)
 
+    def get_queued_players_stats(self, max_records):
+        """Get an iterable of players that need their stats object updated"""
+        previous_max_records = max_records
+        for player_data in self.players.find(Envelope.query_data({"stats": {"$exists": False}})).limit(max_records):
+            yield Summoner(Envelope.unwrap(player_data).data)
+            max_records -= 1
+        self.logger.info("%d players without stats data", previous_max_records - max_records)
 
+        if max_records > 0:
+            previous_max_records = max_records
+            for player_data in self.players.find(Envelope.query_data({"stats": {"$exists": True}})).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
+                yield Summoner(Envelope.unwrap(player_data).data)
+                max_records -= 1
+            self.logger.info("%d players selected with earliest recrawl dates", previous_max_records - max_records)
 
     def update_players(self, players):
         for player in players:
             assert isinstance(player, Summoner)
             self.logger.debug("Updating %d -> %s", player.id, player.name)
             self.players.update(Envelope.query_data({"id": player.id}), Envelope.wrap(player.export(), False))
+
+    def update_player_stats(self, player_id, player_stats):
+        assert isinstance(player_id, int)
+        assert isinstance(player_stats, dict)
+
+        result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.stats": player_stats}})
+        if result["ok"] != 1 or result["nModified"] != 1:
+            self.logger.error("Bad result in setting player stats: %s", result)
+
 
     def update_match_history_refresh(self, player, recrawl_date):
         result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})

@@ -62,6 +62,28 @@ def update_summoners(riot_cache, riot_connection, queued_counts):
         riot_cache.update_players(players)
 
 
+def update_summoner_stats(riot_cache, riot_connection):
+    logger = logging.getLogger(__name__)
+
+    max_players = 500
+    logger.info("Updating summoner stats, up to %d", max_players)
+    success = collections.Counter()
+    for player in riot_cache.get_queued_players_stats(max_players):
+        assert isinstance(player, Summoner)
+
+        try:
+            player_stats = riot_connection.get_summoner_ranked_stats(player.id)
+            riot_cache.update_player_stats(player.id, player_stats)
+            success[True] += 1
+        except SummonerNotFoundError:
+            # This actually happens quite often
+            logger.debug("Player %d no stats, setting to empty stats", player.id)
+            riot_cache.update_player_stats(player.id, {})
+            success[False] += 1
+
+    logger.info("Updating stats succeeded %d / %d times", success[True], success[True] + success[False])
+
+
 def update_matches(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
@@ -156,6 +178,7 @@ def main():
     try:
         queued_counts = collections.Counter()
 
+        update_summoner_stats(riot_cache, riot_connection)
         queue_from_match_histories(riot_cache, riot_connection, queued_counts)
         update_summoners(riot_cache, riot_connection, queued_counts)
         update_matches(riot_cache, riot_connection, queued_counts)
