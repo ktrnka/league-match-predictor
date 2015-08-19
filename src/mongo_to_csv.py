@@ -45,10 +45,9 @@ def main():
     riot_cache = ApiCache(config)
     riot_connection = RiotService.from_config(config)
 
-    champion_labels = make_champion_indicator_names(riot_connection)
-    blue_labels = ["Blue_{}".format(i) for i in champion_labels]
-    red_labels = ["Red_{}".format(i) for i in champion_labels]
-    columns = ["IsSoloQueue", "Blue_Tier", "Red_Tier"] + blue_labels + red_labels + ["IsBlueWinner"]
+    blue_labels = ["Blue_{}".format(i) for i in range(1, 6)]
+    red_labels = ["Red_{}".format(i) for i in range(1, 6)]
+    columns = ["QueueType", "Blue_Tier", "Red_Tier"] + blue_labels + red_labels + ["IsBlueWinner"]
 
     with io.open(args.output_csv, "w") as csv_out:
         csv_out.write(",".join(columns) + "\n")
@@ -56,15 +55,17 @@ def main():
         for match in riot_cache.get_matches():
             winner = match.get_winning_team_id()
 
-            picks = match.get_picks()
+            picks = match.get_picks_role()
             teams = sorted(picks.keys())
+
             tiers = match.get_team_tiers_numeric()
 
-            blue_indicators = champion_set_to_indicators(picks[teams[0]])
-            red_indicators = champion_set_to_indicators(picks[teams[1]])
+            blue_champions = [riot_connection.get_champion_name(champion_id) for champion_id in picks[teams[0]]]
+            red_champions = [riot_connection.get_champion_name(champion_id) for champion_id in picks[teams[1]]]
+
             is_blue_winner = int(winner == teams[0])
 
-            row = [int("SOLO" in match.queue_type)] + [tiers[t] for t in teams] + blue_indicators + red_indicators + [is_blue_winner]
+            row = [match.queue_type] + [tiers[t] for t in teams] + blue_champions + red_champions + [is_blue_winner]
             csv_out.write(",".join(str(x) for x in row) + "\n")
 
 

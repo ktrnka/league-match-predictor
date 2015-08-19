@@ -91,6 +91,11 @@ class RiotService(object):
 
         return self.champions[champion_id]
 
+    def get_champion_name(self, champion_id):
+        assert isinstance(champion_id, int)
+
+        return self.get_champion_info(champion_id)["name"]
+
     def request_static(self, endpoint):
         self.throttle()
         response = requests.get(urlparse.urljoin(self.static_base_url, endpoint), params=self.params)
