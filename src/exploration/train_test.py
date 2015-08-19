@@ -101,7 +101,7 @@ def main():
 
     logistic_hyperparameters = {
         "C": [0.01, 0.1, 1., 10.],
-        "penalty": ["l1", "l2"]
+        "penalty": ["l2"]
     }
     grid_search = sklearn.grid_search.GridSearchCV(logistic, logistic_hyperparameters, n_jobs=-1, cv=split_iterator)
     grid_search.fit(X, y)
@@ -114,8 +114,8 @@ def main():
     gbc_hyperparameters = {
         "learning_rate": [0.5, 1.],
         "max_depth": [3, 5, 10],
-        "min_samples_leaf": [1, 10, 20],
-        "subsample": [0.8, 0.9, 1.]
+        # "min_samples_leaf": [1, 10, 20],
+        # "subsample": [0.8, 0.9, 1.]
     }
 
     grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, gbc_hyperparameters, n_jobs=-1, cv=split_iterator)

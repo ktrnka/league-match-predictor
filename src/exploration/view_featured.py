@@ -1,10 +1,12 @@
 from __future__ import unicode_literals
 import ConfigParser
 import argparse
+import logging
 import math
 import sys
 
-from riot_api import *
+import collections
+from src.riot_api import RiotService
 from src.riot_data import Participant
 
 
