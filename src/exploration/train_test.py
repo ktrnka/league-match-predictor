@@ -67,9 +67,58 @@ def print_feature_importances(columns, tuned_classifier):
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--forest", default=False, action="store_true", help="Experiments with random forests")
+    parser.add_argument("--logistic", default=False, action="store_true", help="Experiments with logistic regression")
+    parser.add_argument("--xg", default=False, action="store_true", help="Experiments with gradient boosting trees")
     parser.add_argument("input", help="CSV of possible features")
-    parser.add_argument("output", help="Image file of learning curve")
     return parser.parse_args()
+
+
+def random_forest(X, y, data, split_iterator):
+    forest = sklearn.ensemble.RandomForestClassifier(10)
+    hyperparameter_space = {
+        "n_estimators": [10],
+        "min_samples_split": [100, 200],
+        "min_samples_leaf": [10, 20, 30]
+    }
+
+    grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+    grid_search.fit(X, y)
+
+    print "Random forest"
+    print_tuning_scores(grid_search)
+    print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search)
+
+
+def logistic_regression(X, y, split_iterator):
+    logistic = sklearn.linear_model.LogisticRegression()
+    hyperparameter_space = {
+        "C": [0.01, 0.1, 1., 10.],
+        "penalty": ["l2"]
+    }
+
+    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+    grid_search.fit(X, y)
+
+    print "Logistic regression"
+    print_tuning_scores(grid_search)
+
+
+def gradient_boosting_exp(X, y, split_iterator):
+    gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
+    hyperparameter_space = {
+        "learning_rate": [0.05, 0.1],
+        "max_depth": [3],
+        # "min_samples_leaf": [1, 10, 20],
+        # "subsample": [0.8, 0.9, 1.]
+    }
+
+    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=1, cv=split_iterator,
+                                                   verbose=1)
+    grid_search.fit(X, y)
+
+    print "Gradient boosting classifier"
+    print_tuning_scores(grid_search)
 
 
 def main():
@@ -82,47 +131,14 @@ def main():
 
     split_iterator = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
 
-    forest = sklearn.ensemble.RandomForestClassifier(10)
+    if args.forest:
+        random_forest(X, y, data, split_iterator)
 
-    forest_hyperparameters = {
-        "n_estimators": [10, 100],
-        "min_samples_split": [100, 200],
-        "min_samples_leaf": [10, 20, 30]
-    }
+    if args.logistic:
+        logistic_regression(X, y, split_iterator)
 
-    grid_search = sklearn.grid_search.GridSearchCV(forest, forest_hyperparameters, n_jobs=-1, cv=split_iterator)
-    grid_search.fit(X, y)
-
-    print "Random forest"
-    print_tuning_scores(grid_search)
-    print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search)
-
-    logistic = sklearn.linear_model.LogisticRegression()
-
-    logistic_hyperparameters = {
-        "C": [0.01, 0.1, 1., 10.],
-        "penalty": ["l2"]
-    }
-    grid_search = sklearn.grid_search.GridSearchCV(logistic, logistic_hyperparameters, n_jobs=-1, cv=split_iterator)
-    grid_search.fit(X, y)
-
-    print "Logistic regression"
-    print_tuning_scores(grid_search)
-
-    gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
-
-    gbc_hyperparameters = {
-        "learning_rate": [0.5, 1.],
-        "max_depth": [3, 5, 10],
-        # "min_samples_leaf": [1, 10, 20],
-        # "subsample": [0.8, 0.9, 1.]
-    }
-
-    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, gbc_hyperparameters, n_jobs=-1, cv=split_iterator)
-    grid_search.fit(X, y)
-
-    print "Gradient boosting classifier"
-    print_tuning_scores(grid_search)
+    if args.xg:
+        gradient_boosting_exp(X, y, split_iterator)
 
 
 if __name__ == "__main__":
