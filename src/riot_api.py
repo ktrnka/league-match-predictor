@@ -48,6 +48,8 @@ class RiotService(object):
         self.num_requests = 0
         self.request_types = collections.Counter()
 
+        self.summoner_spells = None
+
     @staticmethod
     def from_config(config_parser):
         return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"),
@@ -95,6 +97,15 @@ class RiotService(object):
         assert isinstance(champion_id, int)
 
         return self.get_champion_info(champion_id)["name"]
+
+    def get_summoner_spell_name(self, summoner_spell_id):
+        if not self.summoner_spells:
+            self.summoner_spells = self.get_summoner_spells()
+
+        try:
+            return self.summoner_spells[summoner_spell_id]["name"]
+        except KeyError:
+            return "Unknown"
 
     def request_static(self, endpoint):
         self.throttle()
@@ -186,6 +197,14 @@ class RiotService(object):
         if data:
             for match in data["matches"]:
                 yield Match(match)
+
+    def get_summoner_spells(self):
+        data = self.request_static("v1.2/summoner-spell")
+        data = data["data"]
+
+        return {value["id"]: value for value in data.itervalues()}
+
+
 
 class InvalidIdError(ValueError):
     pass

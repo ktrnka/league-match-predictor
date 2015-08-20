@@ -29,7 +29,7 @@ class Tier(object):
 
     @staticmethod
     def mean_level(tiers):
-        return sum(Tier._indexes[tier] for tier in tiers) / float(len(tiers))
+        return sum(Tier._indexes[tier] for tier in tiers) / len(tiers)
 
 
 
@@ -51,19 +51,27 @@ class Summoner:
         return "{}__{}".format(self.name, self.id)
 
 
-class Participant:
-    def __init__(self, team_id, spells, champion_id, name, id=None):
+class Participant(object):
+    def __init__(self, team_id, spells, champion_id, name, id=None, tier=None, participant_id=None):
         assert len(spells) == 2
 
         self.team_id = team_id
         self.spells = spells
         self.champion_id = champion_id
         self.name = name
-        self.id = None
+
+        self.id = id
+        self.tier = tier
+        self.participant_id = None
 
     @staticmethod
     def from_joined(data):
         return Participant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["summonerName"])
+
+    @staticmethod
+    def from_match_participant(data):
+        return Participant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["participantId"], data["highestAchievedSeasonTier"])
+
 
     @staticmethod
     def parse_participants(participants, participant_identities):
@@ -76,8 +84,13 @@ class Participant:
 
     @staticmethod
     def from_split(player, identity):
-        return Participant(player["teamId"], [player["spell1Id"], player["spell2Id"]], player["championId"],
-                                   identity["player"]["summonerName"], id=identity["player"]["summonerId"])
+        return Participant(player["teamId"],
+                           [player["spell1Id"], player["spell2Id"]],
+                           player["championId"],
+                           identity["player"]["summonerName"],
+                           id=identity["player"]["summonerId"],
+                           tier=player["highestAchievedSeasonTier"],
+                           participant_id=player["participantId"])
 
 class Queue(object):
     id_to_name = {
@@ -126,17 +139,16 @@ class Match(object):
 
     def get_picks_role(self):
         """
-        Get array of champions picked for each side in order of participant ID.
+        Get array of Participant for each side in order of participant ID.
         TODO: This should eventually be sorted by TOP, MID, etc.
         :return: dict of team ids mapped to list of champion ids
         """
         picks = collections.defaultdict(list)
-        for player in self.full_data["participants"]:
-            picks[player["teamId"]].append(player)
+        for player in self.players:
+            picks[player.team_id].append(player)
 
         for team_id in picks.keys():
-            picks[team_id] = sorted(picks[team_id], key=lambda p: p["participantId"])
-            picks[team_id] = [p["championId"] for p in picks[team_id]]
+            picks[team_id] = sorted(picks[team_id], key=lambda p: p.id)
 
         return picks
 

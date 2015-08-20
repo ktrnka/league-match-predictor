@@ -13,6 +13,7 @@ import sklearn.tree
 import sklearn.learning_curve
 import matplotlib.pyplot as plt
 from operator import itemgetter
+import math
 
 
 def learning_curve(training_x, training_y, filename, classifier):
@@ -56,6 +57,18 @@ def print_tuning_scores(tuned_estimator, reverse=True):
         print "Validation score {:.2f} +/- {:.2f}, Hyperparams {}".format(100. * test.mean_validation_score,
                                                                           100. * test.cv_validation_scores.std(),
                                                                           test.parameters)
+
+def convert_to_indicators(data, column, drop=True, min_values=1):
+    """Create indicator features for a column, add them to the data, and remove the original field"""
+    dummies = pandas.get_dummies(data[column], column, dummy_na=True)
+    for col in dummies.columns:
+        if dummies[col].sum() < min_values:
+            print "Column {} has only {} values, dropping".format(col, int(dummies[col].sum()))
+        else:
+            data[col] = dummies[col]
+
+    if drop:
+        data.drop(column, axis=1, inplace=True)
 
 
 def print_feature_importances(columns, tuned_classifier):
@@ -134,13 +147,82 @@ def gradient_boosting_exp(X, y, split_iterator):
     print_tuning_scores(grid_search)
 
 
+def dataframe_to_ndarrays(data):
+    """Convert the Pandas DataFrame into X and y numpy.ndarray for sklearn"""
+    assert isinstance(data, pandas.DataFrame)
+    X = data.drop("IsBlueWinner", axis=1).values
+    y = data.IsBlueWinner.values
+    return X, y
+
+
+def preprocess_features(data):
+    print "Before preprocessing"
+    data.info()
+    print "Columns: " + ", ".join(sorted(data.columns))
+
+    # convert the per-role champions into boolean indicators per side
+    # e.g., Blue_1_Ahri, Blue_2_Ahri get merged into Blue_Ahri
+    for team in ["Blue", "Red"]:
+        cols = [col for col in data.columns if team in col and "Champ" in col]
+        indicator_dfs = [pandas.get_dummies(data[col], prefix=team) for col in cols]
+        merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
+        data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
+
+    # convert the per-role summoner spells into sums per side
+    # e.g., Blue_1_Spell_1, Blue_2_Spell_2 get merged into Blue_Flash 0-5
+    for team in ["Blue", "Red"]:
+        cols = [col for col in data.columns if team in col and "Spell" in col]
+        indicator_dfs = [pandas.get_dummies(data[col], prefix="{}_Summoners".format(team)) for col in cols]
+        merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
+        data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
+
+    for team in ["Blue", "Red"]:
+        cols = [col for col in data.columns if team in col and "Played" in col]
+        data[team + "_Played_Sum"] = data[cols].sum(axis=1)
+        data[team + "_Played_LogSum"] = numpy.log(data[team + "_Played_Sum"] + 1)
+        data[team + "_Played_Min"] = data[cols].min(axis=1)
+        data[team + "_Played_Max"] = data[cols].max(axis=1)
+        data = data.drop(cols, axis=1)
+
+    for team in ["Blue", "Red"]:
+        cols = [col for col in data.columns if team in col and "WinRate" in col]
+        data[team + "_WinRate_Sum"] = data[cols].sum(axis=1)
+        data[team + "_WinRate_Min"] = data[cols].min(axis=1)
+        data[team + "_WinRate_Max"] = data[cols].max(axis=1)
+        data = data.drop(cols, axis=1)
+
+    for team in ["Blue", "Red"]:
+        data[team + "_Combined_WinRate_LogPlayed"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
+
+    data = pandas.get_dummies(data)
+
+    # this duplicates the TEAM column just inverted but helps random forest a little bit
+    # data = data.drop(["QueueType_RANKED_SOLO_5x5"], axis=1)
+
+    print "After preprocessing"
+    data.info()
+    print data.describe()
+    print "Columns: " + ", ".join(sorted(data.columns))
+
+    return data
+
+
+def check_data(X, y):
+    """Simple checks to prevent a long runtime that's operating on bad data"""
+    assert abs(y.mean() - 0.5) < 0.02
+    assert X.shape[0] > 10000
+    assert y.shape[0] > 10000
+    assert X.shape[0] == y.shape[0]
+
+
 def main():
     args = parse_args()
 
     data = pandas.read_csv(args.input, header=0)
+    data = preprocess_features(data)
 
-    X = data.values[:, :-1]
-    y = data.values[:, -1]
+    X, y = dataframe_to_ndarrays(data)
+    check_data(X, y)
 
     cross_val_splits = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
 

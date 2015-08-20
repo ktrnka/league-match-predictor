@@ -4,10 +4,12 @@ import logging
 import sys
 import argparse
 import io
+import time
+import collections
 from src.riot_api import RiotService
 
 from src.riot_api_cache import ApiCache
-from src.riot_data import Champion
+from src.riot_data import Champion, Participant
 
 
 def parse_args():
@@ -45,10 +47,25 @@ def main():
     riot_cache = ApiCache(config)
     riot_connection = RiotService.from_config(config)
 
-    blue_labels = ["Blue_{}".format(i) for i in range(1, 6)]
-    red_labels = ["Red_{}".format(i) for i in range(1, 6)]
-    columns = ["QueueType", "Blue_Tier", "Red_Tier"] + blue_labels + red_labels + ["IsBlueWinner"]
+    player_features = []
+    for team in ["Blue", "Red"]:
+        for player in range(1, 6):
+            player_features.append("{}_{}_Champ".format(team, player))
+            player_features.append("{}_{}_WinRate".format(team, player))
+            player_features.append("{}_{}_Played".format(team, player))
+            for summoner_spell_id in [1, 2]:
+                player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
+        for damage_type in ["magic", "physical", "true"]:
+            player_features.append("{}_Damage_{}".format(team, damage_type))
+    columns = ["QueueType", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
 
+    # quickly load all player stats into RAM so we can join more quickly
+    previous_time = time.time()
+    riot_cache.preload_player_stats()
+    riot_cache.precompute_champion_damage()
+    logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
+
+    previous_time = time.time()
     with io.open(args.output_csv, "w") as csv_out:
         csv_out.write(",".join(columns) + "\n")
 
@@ -60,13 +77,38 @@ def main():
 
             tiers = match.get_team_tiers_numeric()
 
-            blue_champions = [riot_connection.get_champion_name(champion_id) for champion_id in picks[teams[0]]]
-            red_champions = [riot_connection.get_champion_name(champion_id) for champion_id in picks[teams[1]]]
+            player_features = []
+            for team in teams:
+                damage_types = collections.Counter()
+
+                for player in picks[team]:
+                    assert isinstance(player, Participant)
+                    player_features.append(riot_connection.get_champion_name(player.champion_id))
+
+                    player_stats = riot_cache.get_player_stats(player.id, force_cache=True)
+
+                    damage_types.update(riot_cache.get_champion_damage_types(player.champion_id))
+
+                    remove_match=False
+                    if player_stats.modify_date > match.creation_time:
+                        remove_match=True
+
+                    player_features.append(player_stats.get_win_rate(player.champion_id, remove=remove_match, won=(winner == team)))
+                    player_features.append(player_stats.get_games_played(player.champion_id, remove=remove_match))
+
+                    for summoner_spell_id in player.spells:
+                        player_features.append(riot_connection.get_summoner_spell_name(summoner_spell_id))
+
+                for damage_type in ["magic", "physical", "true"]:
+                    player_features.append(damage_types[damage_type] / 5)
 
             is_blue_winner = int(winner == teams[0])
 
-            row = [match.queue_type] + [tiers[t] for t in teams] + blue_champions + red_champions + [is_blue_winner]
+            row = [match.queue_type] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
             csv_out.write(",".join(str(x) for x in row) + "\n")
+
+    logger.info("Pulling and converting data took %.1f sec", time.time() - previous_time)
+
 
 
 if __name__ == "__main__":

@@ -46,8 +46,49 @@ class Envelope(object):
         return {"data.{}".format(k): v for k, v in data_query.iteritems()}
 
 
+class PlayerStats(object):
+    def __init__(self, data):
+        self.summoner_id = data["summonerId"]
+        self.modify_date = data["modifyDate"]
+        self.champion_stats = {record["id"]: record["stats"] for record in data["champions"]}
+
+    @staticmethod
+    def make_blank():
+        return PlayerStats({"summonerId": -1, "modifyDate": 0, "champions": []})
+
+    def get_champion(self, champion_id):
+        return self.champion_stats[champion_id]
+
+    def get_win_rate(self, champion_id, remove=False, won=False):
+        try:
+            stats = self.get_champion(champion_id)
+            played = stats["totalSessionsPlayed"]
+            won = stats["totalSessionsWon"]
+            if remove:
+                played -= 1
+                if won:
+                    won -= 1
+
+            return won / float(played)
+        except (KeyError, ZeroDivisionError):
+            return 0.5
+
+    def get_games_played(self, champion_id, remove=False):
+        try:
+            stats = self.get_champion(champion_id)
+            played = stats["totalSessionsPlayed"]
+            if remove:
+                played -= 1
+
+            return played
+        except KeyError:
+            return 0
+
+
+
 class ApiCache(object):
     def __init__(self, config):
+        self.champion_damages = collections.defaultdict(collections.Counter)
         self.mongo_client = pymongo.MongoClient(config.get("mongo", "uri"))
         self.mongo_db = self.mongo_client.get_default_database()
 
@@ -58,6 +99,9 @@ class ApiCache(object):
 
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
+
+        self.local_stats_cache = dict()
+
 
     def queue_match(self, match):
         assert isinstance(match, Match)
@@ -156,6 +200,23 @@ class ApiCache(object):
         if result["ok"] != 1 or result["nModified"] != 1:
             self.logger.error("Bad result in setting player stats: %s", result)
 
+    def get_player_stats(self, player_id, force_cache=False):
+        assert isinstance(player_id, int)
+
+        if not force_cache:
+            if player_id not in self.local_stats_cache:
+                try:
+                    result = self.players.find_one(Envelope.query_data({"id": player_id}))
+                    self.local_stats_cache[player_id] = PlayerStats(result["data"]["stats"])
+                except (TypeError, KeyError):
+                    self.local_stats_cache[player_id] = PlayerStats.make_blank()
+
+        return self.local_stats_cache[player_id]
+
+    def preload_player_stats(self):
+        self.local_stats_cache = collections.defaultdict(PlayerStats.make_blank)
+        for result in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
+            self.local_stats_cache[result["data"]["id"]] = PlayerStats(result["data"]["stats"])
 
     def update_match_history_refresh(self, player, recrawl_date):
         result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
@@ -209,6 +270,23 @@ class ApiCache(object):
         for match_data in self.matches.find(Envelope.query_queued(False)):
             yield Match(match_data["data"])
 
+    def precompute_champion_damage(self):
+        for player_stats in self.local_stats_cache.itervalues():
+            for champion_id, champion_stats in player_stats.champion_stats.iteritems():
+                self.champion_damages[champion_id]["magic"] += champion_stats["totalMagicDamageDealt"]
+                self.champion_damages[champion_id]["physical"] += champion_stats["totalPhysicalDamageDealt"]
+                self.champion_damages[champion_id]["true"] += champion_stats["totalDamageDealt"] - (champion_stats["totalMagicDamageDealt"] + champion_stats["totalPhysicalDamageDealt"])
+
+        for champion_id, champion_damage_stats in self.champion_damages.iteritems():
+            damage_total = float(sum(champion_damage_stats.itervalues()))
+
+            for damage_type in champion_damage_stats.iterkeys():
+                champion_damage_stats[damage_type] /= damage_total
+
+
+    def get_champion_damage_types(self, champion_id):
+        return self.champion_damages[champion_id]
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -231,3 +309,6 @@ def make_unset():
             fields.append("data.participants.{}.{}".format(i, field))
 
     return {k: None for k in fields}
+
+class NoStatsError(KeyError):
+    pass
