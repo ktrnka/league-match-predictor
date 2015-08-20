@@ -57,6 +57,7 @@ def main():
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
             player_features.append("{}_Damage_{}".format(team, damage_type))
+        # player_features.append("{}_FirstBlood".format(team))
     columns = ["QueueType", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
 
     # quickly load all player stats into RAM so we can join more quickly
@@ -80,6 +81,7 @@ def main():
             player_features = []
             for team in teams:
                 damage_types = collections.Counter()
+                first_blood_rate = 0.
 
                 for player in picks[team]:
                     assert isinstance(player, Participant)
@@ -95,6 +97,7 @@ def main():
 
                     player_features.append(player_stats.get_win_rate(player.champion_id, remove=remove_match, won=(winner == team)))
                     player_features.append(player_stats.get_games_played(player.champion_id, remove=remove_match))
+                    first_blood_rate += player_stats.get_first_blood_rate(player.champion_id)
 
                     for summoner_spell_id in player.spells:
                         player_features.append(riot_connection.get_summoner_spell_name(summoner_spell_id))
@@ -102,6 +105,8 @@ def main():
                 damage_sum = float(sum(damage_types.itervalues()))
                 for damage_type in ["magic", "physical", "true"]:
                     player_features.append(damage_types[damage_type] / damage_sum)
+                #
+                # player_features.append(first_blood_rate)
 
             is_blue_winner = int(winner == teams[0])
 

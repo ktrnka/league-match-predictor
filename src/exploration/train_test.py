@@ -12,6 +12,7 @@ import sklearn.grid_search
 import sklearn.tree
 import sklearn.learning_curve
 import matplotlib.pyplot as plt
+import sklearn.decomposition
 from operator import itemgetter
 
 
@@ -114,6 +115,17 @@ def logistic_regression(X, y, split_iterator):
     grid_search.fit(X, y)
 
     print "Logistic regression"
+    print_tuning_scores(grid_search)
+
+    # with PCA
+    num_components = 0.99
+    pca = sklearn.decomposition.PCA(n_components=num_components, copy=True, whiten=False)
+    X_pca = pca.fit_transform(X)
+
+    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+    grid_search.fit(X_pca, y)
+
+    print "Logistic regression with PCA at {} components".format(num_components)
     print_tuning_scores(grid_search)
 
 def elastic_net(X, y):

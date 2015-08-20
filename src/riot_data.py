@@ -235,6 +235,15 @@ class PlayerStats(object):
         except KeyError:
             return 0
 
+    def get_first_blood_rate(self, champion_id):
+        # TODO: This may be leaking something correlated with the outcome.
+        try:
+            stats = self.get_champion(champion_id)
+        except KeyError:
+            return 0.
+        return stats["totalFirstBlood"] / float(stats["totalSessionsPlayed"])
+
+
 class ChampionStats(object):
     def __init__(self, data):
         self.played = data["totalSessionsPlayed"]
