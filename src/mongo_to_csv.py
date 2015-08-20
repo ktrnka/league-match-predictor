@@ -99,8 +99,9 @@ def main():
                     for summoner_spell_id in player.spells:
                         player_features.append(riot_connection.get_summoner_spell_name(summoner_spell_id))
 
+                damage_sum = float(sum(damage_types.itervalues()))
                 for damage_type in ["magic", "physical", "true"]:
-                    player_features.append(damage_types[damage_type] / 5)
+                    player_features.append(damage_types[damage_type] / damage_sum)
 
             is_blue_winner = int(winner == teams[0])
 

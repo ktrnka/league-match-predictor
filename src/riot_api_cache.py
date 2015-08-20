@@ -271,17 +271,18 @@ class ApiCache(object):
             yield Match(match_data["data"])
 
     def precompute_champion_damage(self):
+        play_rates = collections.Counter()
         for player_stats in self.local_stats_cache.itervalues():
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
+                num_played = float(champion_stats["totalSessionsPlayed"])
+                play_rates[champion_id] += num_played
                 self.champion_damages[champion_id]["magic"] += champion_stats["totalMagicDamageDealt"]
                 self.champion_damages[champion_id]["physical"] += champion_stats["totalPhysicalDamageDealt"]
-                self.champion_damages[champion_id]["true"] += champion_stats["totalDamageDealt"] - (champion_stats["totalMagicDamageDealt"] + champion_stats["totalPhysicalDamageDealt"])
+                self.champion_damages[champion_id]["true"] += (champion_stats["totalDamageDealt"] - (champion_stats["totalMagicDamageDealt"] + champion_stats["totalPhysicalDamageDealt"]))
 
         for champion_id, champion_damage_stats in self.champion_damages.iteritems():
-            damage_total = float(sum(champion_damage_stats.itervalues()))
-
             for damage_type in champion_damage_stats.iterkeys():
-                champion_damage_stats[damage_type] /= damage_total
+                champion_damage_stats[damage_type] /= play_rates[champion_id]
 
 
     def get_champion_damage_types(self, champion_id):
