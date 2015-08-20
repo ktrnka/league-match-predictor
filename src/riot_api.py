@@ -107,15 +107,17 @@ class RiotService(object):
         except KeyError:
             return "Unknown"
 
-    def request_static(self, endpoint):
+    def request_static(self, endpoint, additional_params=None):
+        params = _merge_params(self.params, additional_params)
+
         self.throttle()
-        response = requests.get(urlparse.urljoin(self.static_base_url, endpoint), params=self.params)
+        response = requests.get(urlparse.urljoin(self.static_base_url, endpoint), params=params)
         response.raise_for_status()
         data = response.json()
         return data
 
     def get_champions(self):
-        data = self.request_static("v1.2/champion")
+        data = self.request_static("v1.2/champion", additional_params={"champData": "info,stats,tags"})
         data = data["data"]
 
         return {value["id"]: value for value in data.itervalues()}
