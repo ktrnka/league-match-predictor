@@ -197,11 +197,21 @@ class Match(object):
         return Match(wrapped_data)
 
 
+def _merge_stats(champion_datas):
+    totals = collections.Counter()
+
+    for champion_data in champion_datas:
+        totals.update(champion_data)
+
+    return ChampionStats(totals)
+
+
 class PlayerStats(object):
     def __init__(self, data):
         self.summoner_id = data["summonerId"]
         self.modify_date = data["modifyDate"]
         self.champion_stats = {record["id"]: record["stats"] for record in data["champions"]}
+        self.totals = _merge_stats(self.champion_stats.itervalues())
 
     @staticmethod
     def make_blank():

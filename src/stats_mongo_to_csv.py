@@ -96,18 +96,16 @@ def main():
             assert isinstance(player_stats, PlayerStats)
 
             # sum up the total stats and per-role stats
-            total_stats = collections.Counter()
             stats_by_best_tag = collections.defaultdict(collections.Counter)
             stats_by_merged_tag = collections.defaultdict(collections.Counter)
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
-                total_stats.update(champion_stats)
                 stats_by_best_tag[champion_best_tag[champion_id]].update(champion_stats)
                 stats_by_merged_tag[champion_merged_tags[champion_id]].update(champion_stats)
 
             stats_by_best_tag = {k: ChampionStats(v) for k, v in stats_by_best_tag.iteritems()}
             stats_by_merged_tag = {k: ChampionStats(v) for k, v in stats_by_merged_tag.iteritems()}
 
-            total_stats = ChampionStats(total_stats)
+            total_stats = player_stats.totals
 
             main_pri_tag = max(stats_by_best_tag.keys(), key=lambda i: stats_by_best_tag[i].played)
             main_dual_tag = max(stats_by_merged_tag.keys(), key=lambda i: stats_by_merged_tag[i].played)
