@@ -6,10 +6,10 @@ import argparse
 import io
 import time
 import collections
-from src.riot_api import RiotService
+from riot_api import RiotService
 
-from src.riot_api_cache import ApiCache
-from src.riot_data import Champion, Participant
+from riot_api_cache import ApiCache
+from riot_data import Champion, Participant
 
 
 def parse_args():

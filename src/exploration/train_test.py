@@ -13,7 +13,6 @@ import sklearn.tree
 import sklearn.learning_curve
 import matplotlib.pyplot as plt
 from operator import itemgetter
-import math
 
 
 def learning_curve(training_x, training_y, filename, classifier):
@@ -192,12 +191,9 @@ def preprocess_features(data):
         data = data.drop(cols, axis=1)
 
     for team in ["Blue", "Red"]:
-        data[team + "_Combined_WinRate_LogPlayed"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
+        data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
 
     data = pandas.get_dummies(data)
-
-    # this duplicates the TEAM column just inverted but helps random forest a little bit
-    # data = data.drop(["QueueType_RANKED_SOLO_5x5"], axis=1)
 
     print "After preprocessing"
     data.info()

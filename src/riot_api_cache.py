@@ -4,8 +4,12 @@ from datetime import datetime
 import logging
 import sys
 import argparse
+
 import pymongo
+
 from riot_data import Summoner, Match
+from riot_data import PlayerStats
+
 
 _ENVELOPE_UPDATED_DATE = "updated"
 
@@ -44,46 +48,6 @@ class Envelope(object):
     @staticmethod
     def query_data(data_query):
         return {"data.{}".format(k): v for k, v in data_query.iteritems()}
-
-
-class PlayerStats(object):
-    def __init__(self, data):
-        self.summoner_id = data["summonerId"]
-        self.modify_date = data["modifyDate"]
-        self.champion_stats = {record["id"]: record["stats"] for record in data["champions"]}
-
-    @staticmethod
-    def make_blank():
-        return PlayerStats({"summonerId": -1, "modifyDate": 0, "champions": []})
-
-    def get_champion(self, champion_id):
-        return self.champion_stats[champion_id]
-
-    def get_win_rate(self, champion_id, remove=False, won=False):
-        try:
-            stats = self.get_champion(champion_id)
-            played = stats["totalSessionsPlayed"]
-            won = stats["totalSessionsWon"]
-            if remove:
-                played -= 1
-                if won:
-                    won -= 1
-
-            return won / float(played)
-        except (KeyError, ZeroDivisionError):
-            return 0.5
-
-    def get_games_played(self, champion_id, remove=False):
-        try:
-            stats = self.get_champion(champion_id)
-            played = stats["totalSessionsPlayed"]
-            if remove:
-                played -= 1
-
-            return played
-        except KeyError:
-            return 0
-
 
 
 class ApiCache(object):

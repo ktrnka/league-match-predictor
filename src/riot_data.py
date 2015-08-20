@@ -1,5 +1,4 @@
 from __future__ import unicode_literals
-import pprint
 import sys
 import argparse
 import datetime
@@ -198,12 +197,62 @@ class Match(object):
         return Match(wrapped_data)
 
 
-"""
-Match value documentation from Riot API
+class PlayerStats(object):
+    def __init__(self, data):
+        self.summoner_id = data["summonerId"]
+        self.modify_date = data["modifyDate"]
+        self.champion_stats = {record["id"]: record["stats"] for record in data["champions"]}
 
-matchMode	string	Match mode (Legal values: CLASSIC, ODIN, ARAM, TUTORIAL, ONEFORALL, ASCENSION, FIRSTBLOOD, KINGPORO)
+    @staticmethod
+    def make_blank():
+        return PlayerStats({"summonerId": -1, "modifyDate": 0, "champions": []})
 
-matchType	string	Match type (Legal values: CUSTOM_GAME, MATCHED_GAME, TUTORIAL_GAME)
+    def get_champion(self, champion_id):
+        return self.champion_stats[champion_id]
 
-queueType Match queue type (Legal values: CUSTOM, NORMAL_5x5_BLIND, RANKED_SOLO_5x5, RANKED_PREMADE_5x5, BOT_5x5, NORMAL_3x3, RANKED_PREMADE_3x3, NORMAL_5x5_DRAFT, ODIN_5x5_BLIND, ODIN_5x5_DRAFT, BOT_ODIN_5x5, BOT_5x5_INTRO, BOT_5x5_BEGINNER, BOT_5x5_INTERMEDIATE, RANKED_TEAM_3x3, RANKED_TEAM_5x5, BOT_TT_3x3, GROUP_FINDER_5x5, ARAM_5x5, ONEFORALL_5x5, FIRSTBLOOD_1x1, FIRSTBLOOD_2x2, SR_6x6, URF_5x5, ONEFORALL_MIRRORMODE_5x5, BOT_URF_5x5, NIGHTMARE_BOT_5x5_RANK1, NIGHTMARE_BOT_5x5_RANK2, NIGHTMARE_BOT_5x5_RANK5, ASCENSION_5x5, HEXAKILL, BILGEWATER_ARAM_5x5, KING_PORO_5x5, COUNTER_PICK, BILGEWATER_5x5)
-"""
+    def get_win_rate(self, champion_id, remove=False, won=False):
+        try:
+            stats = self.get_champion(champion_id)
+            played = stats["totalSessionsPlayed"]
+            won = stats["totalSessionsWon"]
+            if remove:
+                played -= 1
+                if won:
+                    won -= 1
+
+            return won / float(played)
+        except (KeyError, ZeroDivisionError):
+            return 0.5
+
+    def get_games_played(self, champion_id, remove=False):
+        try:
+            stats = self.get_champion(champion_id)
+            played = stats["totalSessionsPlayed"]
+            if remove:
+                played -= 1
+
+            return played
+        except KeyError:
+            return 0
+
+class ChampionStats(object):
+    def __init__(self, data):
+        self.played = data["totalSessionsPlayed"]
+        self.won = data["totalSessionsWon"]
+
+        self.magic_damage = data["totalMagicDamageDealt"]
+        self.physical_damage = data["totalPhysicalDamageDealt"]
+        self.total_damage = data["totalDamageDealt"]
+
+        self.kills = data["totalChampionKills"]
+        self.deaths = data["totalDeathsPerSession"]
+        self.assists = data["totalAssists"]
+
+        self.num_first_blood = data["totalFirstBlood"]
+
+        self.double_kills = data["totalDoubleKills"]
+        self.triple_kills = data["totalTripleKills"]
+        self.quadra_kills = data["totalQuadraKills"]
+        self.penta_kills = data["totalPentaKills"]
+
+        self.turret_kills = data["totalTurretsKilled"]

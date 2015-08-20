@@ -1,7 +1,6 @@
 from __future__ import unicode_literals
 import ConfigParser
 import argparse
-import pprint
 import sys
 import datetime
 
