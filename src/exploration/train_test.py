@@ -92,9 +92,9 @@ def parse_args():
 def random_forest(X, y, data, split_iterator):
     forest = sklearn.ensemble.RandomForestClassifier(10)
     hyperparameter_space = {
-        "n_estimators": [100],
-        "min_samples_split": [200],
-        "min_samples_leaf": [30]
+        "n_estimators": [100, 500],
+        "min_samples_split": [50, 100, 200],
+        "min_samples_leaf": [20, 30]
     }
 
     grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=-1, cv=split_iterator)
