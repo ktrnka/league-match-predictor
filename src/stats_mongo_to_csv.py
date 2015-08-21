@@ -19,6 +19,40 @@ def parse_args():
     parser.add_argument("output_csv", help="Output file to use for machine learning")
     return parser.parse_args()
 
+
+def aggregate_win_played_rates(riot_cache):
+    total_rates = collections.Counter()
+    champion_rates = collections.defaultdict(collections.Counter)
+    # compute average win rate per champion and average win rate overall
+    for player_stats in riot_cache.local_stats_cache.itervalues():
+        assert isinstance(player_stats, PlayerStats)
+
+        for champion_id, champion_stats in player_stats.champion_stats.iteritems():
+            champion_stats = ChampionStats(champion_stats)
+            total_rates["played"] += champion_stats.played
+            total_rates["won"] += champion_stats.won
+
+            champion_rates[champion_id]["played"] += champion_stats.played
+            champion_rates[champion_id]["won"] += champion_stats.won
+    return total_rates, champion_rates
+
+
+def get_champion_roles(champion_rates, riot_connection):
+    champion_best_tag = dict()
+    champion_merged_tags = dict()
+    for champion_id in champion_rates.iterkeys():
+        try:
+            champion_info = riot_connection.get_champion_info(champion_id)
+            tags = champion_info["tags"]
+        except KeyError:
+            print "Missing champion id: {}".format(champion_id)
+            tags = ["UnknownChampion"]
+
+        champion_best_tag[champion_id] = tags[0]
+        champion_merged_tags[champion_id] = ",".join(sorted(tags))
+    return champion_best_tag, champion_merged_tags
+
+
 def main():
     args = parse_args()
 
@@ -44,33 +78,9 @@ def main():
     riot_cache.precompute_champion_damage()
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
 
-    total_rates = collections.Counter()
-    champion_rates = collections.defaultdict(collections.Counter)
+    total_rates, champion_rates = aggregate_win_played_rates(riot_cache)
 
-    # compute average win rate per champion and average win rate overall
-    for player_stats in riot_cache.local_stats_cache.itervalues():
-        assert isinstance(player_stats, PlayerStats)
-
-        for champion_id, champion_stats in player_stats.champion_stats.iteritems():
-            champion_stats = ChampionStats(champion_stats)
-            total_rates["played"] += champion_stats.played
-            total_rates["won"] += champion_stats.won
-
-            champion_rates[champion_id]["played"] += champion_stats.played
-            champion_rates[champion_id]["won"] += champion_stats.won
-
-    champion_best_tag = dict()
-    champion_merged_tags = dict()
-    for champion_id in champion_rates.iterkeys():
-        try:
-            champion_info = riot_connection.get_champion_info(champion_id)
-            tags = champion_info["tags"]
-        except KeyError:
-            print "Missing champion id: {}".format(champion_id)
-            tags = ["UnknownChampion"]
-
-        champion_best_tag[champion_id] = tags[0]
-        champion_merged_tags[champion_id] = ",".join(sorted(tags))
+    champion_primary_role, champion_dual_role = get_champion_roles(champion_rates, riot_connection)
 
     columns = [
         "OtherChampions_Played",
@@ -99,8 +109,8 @@ def main():
             stats_by_best_tag = collections.defaultdict(collections.Counter)
             stats_by_merged_tag = collections.defaultdict(collections.Counter)
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
-                stats_by_best_tag[champion_best_tag[champion_id]].update(champion_stats)
-                stats_by_merged_tag[champion_merged_tags[champion_id]].update(champion_stats)
+                stats_by_best_tag[champion_primary_role[champion_id]].update(champion_stats)
+                stats_by_merged_tag[champion_dual_role[champion_id]].update(champion_stats)
 
             stats_by_best_tag = {k: ChampionStats(v) for k, v in stats_by_best_tag.iteritems()}
             stats_by_merged_tag = {k: ChampionStats(v) for k, v in stats_by_merged_tag.iteritems()}
@@ -118,19 +128,19 @@ def main():
                 total_played = total_stats.played - champion_stats.played
                 total_won = total_stats.won - champion_stats.won
 
-                same_primary_played = stats_by_best_tag[champion_best_tag[champion_id]].played - champion_stats.played
-                same_primary_won = stats_by_best_tag[champion_best_tag[champion_id]].won - champion_stats.won
+                same_primary_played = stats_by_best_tag[champion_primary_role[champion_id]].played - champion_stats.played
+                same_primary_won = stats_by_best_tag[champion_primary_role[champion_id]].won - champion_stats.won
 
-                same_dual_played = stats_by_merged_tag[champion_merged_tags[champion_id]].played - champion_stats.played
-                same_dual_won = stats_by_merged_tag[champion_merged_tags[champion_id]].won - champion_stats.won
+                same_dual_played = stats_by_merged_tag[champion_dual_role[champion_id]].played - champion_stats.played
+                same_dual_won = stats_by_merged_tag[champion_dual_role[champion_id]].won - champion_stats.won
 
                 row = [total_played,
                        total_won / float(total_played),
-                       main_pri_tag == champion_best_tag[champion_id],
+                       main_pri_tag == champion_primary_role[champion_id],
                        same_primary_played,
                        same_primary_played / float(total_played),
                        same_primary_won / float(same_primary_played + 0.01),
-                       main_dual_tag == champion_merged_tags[champion_id],
+                       main_dual_tag == champion_dual_role[champion_id],
                        same_dual_played,
                        same_dual_played / float(total_played),
                        same_dual_won / float(same_dual_played + 0.01),

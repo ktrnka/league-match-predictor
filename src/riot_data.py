@@ -278,3 +278,6 @@ class ChampionStats(object):
 
     def get_win_rate(self, remove_games=0, remove_wins=0):
         return (self.won - remove_wins) / (self.played - remove_games)
+
+    def get_played(self, remove_games=0):
+        return self.played - remove_games
