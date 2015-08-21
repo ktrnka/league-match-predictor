@@ -13,6 +13,7 @@ import sklearn.tree
 import sklearn.learning_curve
 import matplotlib.pyplot as plt
 import sklearn.decomposition
+import sklearn.preprocessing
 from operator import itemgetter
 
 
@@ -104,7 +105,16 @@ def random_forest(X, y, data, split_iterator):
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search)
 
 
-def logistic_regression(X, y, split_iterator):
+def print_logistic_regression_feature_importances(column_names, classifier):
+    parameters = classifier.coef_[0,:]
+    paired = zip(column_names, parameters)
+
+    print "Feature weights in logistic regression"
+    for name, weight in sorted(paired, key=itemgetter(1), reverse=True):
+        print "\t{:20s}: {}".format(name, weight)
+
+
+def logistic_regression(X, y, data, split_iterator, pca=False):
     logistic = sklearn.linear_model.LogisticRegression()
     hyperparameter_space = {
         "C": [0.005, 0.01, 0.02, 0.1, 1.],
@@ -116,17 +126,28 @@ def logistic_regression(X, y, split_iterator):
 
     print "Logistic regression"
     print_tuning_scores(grid_search)
+    print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
 
-    # with PCA
-    num_components = 0.99
-    pca = sklearn.decomposition.PCA(n_components=num_components, copy=True, whiten=False)
-    X_pca = pca.fit_transform(X)
-
+    # with feature scaling
+    X_scaled = sklearn.preprocessing.scale(X)
     grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=-1, cv=split_iterator)
-    grid_search.fit(X_pca, y)
+    grid_search.fit(X_scaled, y)
 
-    print "Logistic regression with PCA at {} components".format(num_components)
+    print "Logistic regression with feature scaling"
     print_tuning_scores(grid_search)
+    print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
+
+    # with PCA (slow)
+    if pca:
+        num_components = 0.99
+        pca = sklearn.decomposition.PCA(n_components=num_components, copy=True, whiten=False)
+        X_pca = pca.fit_transform(X)
+
+        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+        grid_search.fit(X_pca, y)
+
+        print "Logistic regression with PCA at {} components".format(num_components)
+        print_tuning_scores(grid_search)
 
 def elastic_net(X, y):
     # note that GridSearchCV doesn't work with ElasticNet; need to use ElasticNetCV to select alpha and such
@@ -187,22 +208,34 @@ def preprocess_features(data):
         merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
         data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
 
+    # merge win rates and such across the team
     for team in ["Blue", "Red"]:
-        cols = [col for col in data.columns if team in col and "Played" in col]
+        cols = [col for col in data.columns if team in col and "_Played" in col]
         data[team + "_Played_Sum"] = data[cols].sum(axis=1)
         data[team + "_Played_LogSum"] = numpy.log(data[team + "_Played_Sum"] + 1)
         data[team + "_Played_Min"] = data[cols].min(axis=1)
         data[team + "_Played_Max"] = data[cols].max(axis=1)
         data = data.drop(cols, axis=1)
 
-    for team in ["Blue", "Red"]:
-        cols = [col for col in data.columns if team in col and "WinRate" in col]
+        cols = [col for col in data.columns if team in col and "_TotalPlayed" in col]
+        # data[team + "_TotalPlayed_Sum"] = data[cols].sum(axis=1)
+        # # data[team + "_TotalPlayed_LogSum"] = numpy.log(data[team + "_TotalPlayed_Sum"] + 1)
+        # data[team + "_TotalPlayed_Min"] = data[cols].min(axis=1)
+        # data[team + "_TotalPlayed_Max"] = data[cols].max(axis=1)
+        data = data.drop(cols, axis=1)
+
+        cols = [col for col in data.columns if team in col and "_WinRate" in col]
         data[team + "_WinRate_Sum"] = data[cols].sum(axis=1)
         data[team + "_WinRate_Min"] = data[cols].min(axis=1)
         data[team + "_WinRate_Max"] = data[cols].max(axis=1)
         data = data.drop(cols, axis=1)
+        
+        cols = [col for col in data.columns if team in col and "_TotalWinRate" in col]
+        # data[team + "_TotalWinRate_Sum"] = data[cols].sum(axis=1)
+        # data[team + "_TotalWinRate_Min"] = data[cols].min(axis=1)
+        # data[team + "_TotalWinRate_Max"] = data[cols].max(axis=1)
+        data = data.drop(cols, axis=1)
 
-    for team in ["Blue", "Red"]:
         data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
 
     data = pandas.get_dummies(data)
@@ -238,7 +271,7 @@ def main():
         random_forest(X, y, data, cross_val_splits)
 
     if args.logistic:
-        logistic_regression(X, y, cross_val_splits)
+        logistic_regression(X, y, data, cross_val_splits)
 
     if args.elastic:
         elastic_net(X, y)
