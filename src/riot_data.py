@@ -276,8 +276,17 @@ class ChampionStats(object):
 
         self.turret_kills = data["totalTurretsKilled"]
 
-    def get_win_rate(self, remove_games=0, remove_wins=0):
-        return (self.won - remove_wins) / (self.played - remove_games)
+    def get_win_rate(self, remove_games=0, remove_wins=0, remove_stats=None):
+        if remove_stats:
+            assert isinstance (remove_stats, ChampionStats)
+            remove_games += remove_stats.played
+            remove_wins += remove_stats.won
 
-    def get_played(self, remove_games=0):
+        return (self.won - remove_wins) / float(self.played - remove_games)
+
+    def get_played(self, remove_games=0, remove_stats=None):
+        if remove_stats:
+            assert isinstance (remove_stats, ChampionStats)
+            remove_games += remove_stats.played
+
         return self.played - remove_games
