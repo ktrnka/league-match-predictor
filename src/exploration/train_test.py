@@ -216,6 +216,13 @@ def preprocess_features(data):
         data[team + "_Played_Min"] = data[cols].min(axis=1)
         data[team + "_Played_Max"] = data[cols].max(axis=1)
         data = data.drop(cols, axis=1)
+        
+        cols = [col for col in data.columns if team in col and "_V1Played" in col]
+        data[team + "_V1Played_Sum"] = data[cols].sum(axis=1)
+        data[team + "_V1Played_LogSum"] = numpy.log(data[team + "_V1Played_Sum"] + 1)
+        data[team + "_V1Played_Min"] = data[cols].min(axis=1)
+        data[team + "_V1Played_Max"] = data[cols].max(axis=1)
+        data = data.drop(cols, axis=1)
 
         cols = [col for col in data.columns if team in col and "_TotalPlayed" in col]
         # data[team + "_TotalPlayed_Sum"] = data[cols].sum(axis=1)
@@ -230,6 +237,12 @@ def preprocess_features(data):
         data[team + "_WinRate_Max"] = data[cols].max(axis=1)
         data = data.drop(cols, axis=1)
         
+        cols = [col for col in data.columns if team in col and "_V1WinRate" in col]
+        data[team + "_V1WinRate_Sum"] = data[cols].sum(axis=1)
+        data[team + "_V1WinRate_Min"] = data[cols].min(axis=1)
+        data[team + "_V1WinRate_Max"] = data[cols].max(axis=1)
+        data = data.drop(cols, axis=1)
+        
         cols = [col for col in data.columns if team in col and "_TotalWinRate" in col]
         # data[team + "_TotalWinRate_Sum"] = data[cols].sum(axis=1)
         # data[team + "_TotalWinRate_Min"] = data[cols].min(axis=1)
@@ -237,6 +250,7 @@ def preprocess_features(data):
         data = data.drop(cols, axis=1)
 
         data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
+        data[team + "_V1Combined_WR_LP"] = data[team + "_V1WinRate_Sum"] * data[team + "_V1Played_LogSum"]
 
     data = pandas.get_dummies(data)
 
