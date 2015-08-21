@@ -128,12 +128,12 @@ def get_recrawl_date(matches):
     date_format = "%Y-%m-%d %H:%M:%S"
 
     dates = [match.get_creation_datetime() for match in matches]
-    rate = (max(dates) - min(dates)) / len(dates)
+    rate = (datetime.datetime.now() - min(dates)) / len(dates)
     recrawl = max(dates) + rate * 15
     logging.getLogger(__name__).debug("%d matches from %s to %s, setting recrawl date to %s",
                                      len(matches),
                                      min(dates).strftime(date_format),
-                                     max(dates).strftime(date_format),
+                                     datetime.datetime.now(),
                                      recrawl.strftime(date_format)
     )
     return (recrawl - EPOCH).total_seconds()
