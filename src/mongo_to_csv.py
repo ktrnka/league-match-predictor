@@ -52,10 +52,10 @@ def main():
     for team in ["Blue", "Red"]:
         for player in range(1, 6):
             player_features.append("{}_{}_Champ".format(team, player))
-            player_features.append("{}_{}_V1WinRate".format(team, player))
-            player_features.append("{}_{}_V1Played".format(team, player))
             player_features.append("{}_{}_WinRate".format(team, player))
             player_features.append("{}_{}_Played".format(team, player))
+            player_features.append("{}_{}_GeneralPlayRate".format(team, player))
+            player_features.append("{}_{}_GeneralWinRate".format(team, player))
             player_features.append("{}_{}_TotalWinRate".format(team, player))
             player_features.append("{}_{}_TotalPlayed".format(team, player))
             for summoner_spell_id in [1, 2]:
@@ -68,6 +68,9 @@ def main():
     previous_time = time.time()
     riot_cache.preload_player_stats()
     riot_cache.precompute_champion_damage()
+
+    agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
+
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
 
     previous_time = time.time()
@@ -103,13 +106,13 @@ def main():
 
                     champion_stats = player_stats.get_champion_stats(player.champion_id)
 
-                    # old method for computing
-                    player_features.append(player_stats.get_win_rate(player.champion_id, remove=bool(remove_match), won=bool(remove_win)))
-                    player_features.append(player_stats.get_games_played(player.champion_id, remove=bool(remove_match)))
-
                     # win rate on this champion
                     player_features.append(champion_stats.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
                     player_features.append(champion_stats.get_played(remove_games=remove_match))
+
+                    # play rate in general and win rate in general for all players
+                    player_features.append(agg_champion_stats[player.champion_id].played / float(agg_stats.played))
+                    player_features.append(agg_champion_stats[player.champion_id].won / float(agg_champion_stats[player.champion_id].played))
 
                     # win rate overall
                     player_features.append(player_stats.totals.get_win_rate(remove_games=remove_match, remove_wins=remove_win))

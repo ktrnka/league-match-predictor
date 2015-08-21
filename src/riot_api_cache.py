@@ -7,7 +7,7 @@ import argparse
 
 import pymongo
 
-from riot_data import Summoner, Match
+from riot_data import Summoner, Match, ChampionStats
 from riot_data import PlayerStats
 
 
@@ -248,9 +248,22 @@ class ApiCache(object):
             for damage_type in champion_damage_stats.iterkeys():
                 champion_damage_stats[damage_type] /= play_rates[champion_id]
 
-
     def get_champion_damage_types(self, champion_id):
         return self.champion_damages[champion_id]
+
+    def aggregate_champion_stats(self):
+        """Aggregate all stats across all champions and return a ChampionStats, dict(id -> ChampionStats)"""
+        total_data = collections.Counter()
+        champion_data = collections.defaultdict(collections.Counter)
+
+        for player_stats in self.local_stats_cache.itervalues():
+            assert isinstance(player_stats, PlayerStats)
+
+            for champion_id, champion_stats_dict in player_stats.champion_stats.iteritems():
+                total_data.update(champion_stats_dict)
+                champion_data[champion_id].update(champion_stats_dict)
+
+        return ChampionStats(total_data), {k: ChampionStats(v) for k, v in champion_data.iteritems()}
 
 
 def parse_args():

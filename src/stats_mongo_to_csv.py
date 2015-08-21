@@ -20,23 +20,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def aggregate_win_played_rates(riot_cache):
-    total_rates = collections.Counter()
-    champion_rates = collections.defaultdict(collections.Counter)
-    # compute average win rate per champion and average win rate overall
-    for player_stats in riot_cache.local_stats_cache.itervalues():
-        assert isinstance(player_stats, PlayerStats)
-
-        for champion_id, champion_stats in player_stats.champion_stats.iteritems():
-            champion_stats = ChampionStats(champion_stats)
-            total_rates["played"] += champion_stats.played
-            total_rates["won"] += champion_stats.won
-
-            champion_rates[champion_id]["played"] += champion_stats.played
-            champion_rates[champion_id]["won"] += champion_stats.won
-    return total_rates, champion_rates
-
-
 def get_champion_roles(champion_rates, riot_connection):
     champion_best_tag = dict()
     champion_merged_tags = dict()
@@ -78,7 +61,7 @@ def main():
     riot_cache.precompute_champion_damage()
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
 
-    total_rates, champion_rates = aggregate_win_played_rates(riot_cache)
+    agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
     columns = [
         "OtherChampions_Played",
@@ -103,8 +86,8 @@ def main():
 
                 row = [total_stats.get_played(remove_stats=champion_stats),
                        total_stats.get_win_rate(remove_stats=champion_stats),
-                       (champion_rates[champion_id]["played"] - champion_stats.played) / float(total_rates["played"] - champion_stats.played),
-                       (champion_rates[champion_id]["won"] - champion_stats.won) / float(champion_rates[champion_id]["played"] - champion_stats.played),
+                       (agg_champion_stats[champion_id].played - champion_stats.played) / float(agg_stats.played - champion_stats.played),
+                       (agg_champion_stats[champion_id].won - champion_stats.won) / float(agg_champion_stats[champion_id].played - champion_stats.played),
                        champion_stats.get_played(),
                        champion_stats.get_win_rate()]
                 csv_out.write(",".join(str(x) for x in row) + "\n")

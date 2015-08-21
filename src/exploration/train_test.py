@@ -126,7 +126,9 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
 
     print "Logistic regression"
     print_tuning_scores(grid_search)
-    print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
+
+    # The feature weights really aren't interpretable without also having the scale of the feature
+    # print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
 
     # with feature scaling
     X_scaled = sklearn.preprocessing.scale(X)
@@ -187,21 +189,38 @@ def dataframe_to_ndarrays(data):
     return X, y
 
 
+def merge_roles(data, team, suffix, include_log_sum=False):
+    cols = [col for col in data.columns if team in col and col.endswith(suffix)]
+    assert len(cols) == 5
+
+    data[team + suffix + "_Sum"] = data[cols].sum(axis=1)
+    if include_log_sum:
+        data[team + suffix + "_LogSum"] = numpy.log(data[team + suffix + "_Sum"] + 1)
+    data[team + suffix + "_Min"] = data[cols].min(axis=1)
+    data[team + suffix + "_Max"] = data[cols].max(axis=1)
+    return data.drop(cols, axis=1)
+
+
 def preprocess_features(data):
     print "Before preprocessing"
     data.info()
     print "Columns: " + ", ".join(sorted(data.columns))
 
-    # convert the per-role champions into boolean indicators per side
-    # e.g., Blue_1_Ahri, Blue_2_Ahri get merged into Blue_Ahri
-    for team in ["Blue", "Red"]:
-        cols = [col for col in data.columns if team in col and "Champ" in col]
-        indicator_dfs = [pandas.get_dummies(data[col], prefix=team) for col in cols]
-        merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
-        data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
+    for col in [c for c in data.columns if "Damage" in c]:
+        #data[col] = pandas.qcut(data[col], 5)
+        data[col + "_qcut5"] = pandas.qcut(data[col], 5)
+
+    data = data.drop([c for c in data.columns if "Champ" in c], axis=1)
+    # # convert the per-role champions into boolean indicators per side
+    # # e.g., Blue_1_Ahri, Blue_2_Ahri get merged into Blue_Ahri
+    # for team in ["Blue", "Red"]:
+    #     cols = [col for col in data.columns if team in col and "Champ" in col]
+    #     indicator_dfs = [pandas.get_dummies(data[col], prefix=team) for col in cols]
+    #     merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
+    #     data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
 
     # convert the per-role summoner spells into sums per side
-    # e.g., Blue_1_Spell_1, Blue_2_Spell_2 get merged into Blue_Flash 0-5
+    # e.g., Blue_1_Spell_1, (0-1) Blue_2_Spell_2 (0-1), ... get merged into Blue_Flash (0-5)
     for team in ["Blue", "Red"]:
         cols = [col for col in data.columns if team in col and "Spell" in col]
         indicator_dfs = [pandas.get_dummies(data[col], prefix="{}_Summoners".format(team)) for col in cols]
@@ -210,49 +229,25 @@ def preprocess_features(data):
 
     # merge win rates and such across the team
     for team in ["Blue", "Red"]:
-        cols = [col for col in data.columns if team in col and "_Played" in col]
-        data[team + "_Played_Sum"] = data[cols].sum(axis=1)
-        data[team + "_Played_LogSum"] = numpy.log(data[team + "_Played_Sum"] + 1)
-        data[team + "_Played_Min"] = data[cols].min(axis=1)
-        data[team + "_Played_Max"] = data[cols].max(axis=1)
-        data = data.drop(cols, axis=1)
-        
-        cols = [col for col in data.columns if team in col and "_V1Played" in col]
-        data[team + "_V1Played_Sum"] = data[cols].sum(axis=1)
-        data[team + "_V1Played_LogSum"] = numpy.log(data[team + "_V1Played_Sum"] + 1)
-        data[team + "_V1Played_Min"] = data[cols].min(axis=1)
-        data[team + "_V1Played_Max"] = data[cols].max(axis=1)
-        data = data.drop(cols, axis=1)
+        # are they good at a weird champion?
+        # for i in range(1, 6):
+        #     data["{}_{}_DarkHorse".format(team, i)] = data["{}_{}_WinRate".format(team, i)] / data["{}_{}_GeneralPlayRate".format(team, i)]
+        # data = merge_roles(data, team, "_DarkHorse")
 
-        cols = [col for col in data.columns if team in col and "_TotalPlayed" in col]
-        # data[team + "_TotalPlayed_Sum"] = data[cols].sum(axis=1)
-        # # data[team + "_TotalPlayed_LogSum"] = numpy.log(data[team + "_TotalPlayed_Sum"] + 1)
-        # data[team + "_TotalPlayed_Min"] = data[cols].min(axis=1)
-        # data[team + "_TotalPlayed_Max"] = data[cols].max(axis=1)
-        data = data.drop(cols, axis=1)
+        data = merge_roles(data, team, "_Played", include_log_sum=True)
+        data = merge_roles(data, team, "_TotalPlayed", include_log_sum=True)
 
-        cols = [col for col in data.columns if team in col and "_WinRate" in col]
-        data[team + "_WinRate_Sum"] = data[cols].sum(axis=1)
-        data[team + "_WinRate_Min"] = data[cols].min(axis=1)
-        data[team + "_WinRate_Max"] = data[cols].max(axis=1)
-        data = data.drop(cols, axis=1)
-        
-        cols = [col for col in data.columns if team in col and "_V1WinRate" in col]
-        data[team + "_V1WinRate_Sum"] = data[cols].sum(axis=1)
-        data[team + "_V1WinRate_Min"] = data[cols].min(axis=1)
-        data[team + "_V1WinRate_Max"] = data[cols].max(axis=1)
-        data = data.drop(cols, axis=1)
-        
-        cols = [col for col in data.columns if team in col and "_TotalWinRate" in col]
-        # data[team + "_TotalWinRate_Sum"] = data[cols].sum(axis=1)
-        # data[team + "_TotalWinRate_Min"] = data[cols].min(axis=1)
-        # data[team + "_TotalWinRate_Max"] = data[cols].max(axis=1)
-        data = data.drop(cols, axis=1)
+        data = merge_roles(data, team, "_GeneralPlayRate")
+        data = merge_roles(data, team, "_WinRate")
+        data = merge_roles(data, team, "_TotalWinRate")
+        data = merge_roles(data, team, "_GeneralWinRate")
 
         data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
-        data[team + "_V1Combined_WR_LP"] = data[team + "_V1WinRate_Sum"] * data[team + "_V1Played_LogSum"]
 
     data = pandas.get_dummies(data)
+
+    # speeds up learning a little
+    data = data.drop("Blue_Summoners_Unknown Red_Summoners_Unknown".split(), axis=1)
 
     print "After preprocessing"
     data.info()
