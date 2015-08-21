@@ -275,3 +275,6 @@ class ChampionStats(object):
         self.penta_kills = data["totalPentaKills"]
 
         self.turret_kills = data["totalTurretsKilled"]
+
+    def get_win_rate(self, remove_games=0, remove_wins=0):
+        return (self.won - remove_wins) / (self.played - remove_games)
