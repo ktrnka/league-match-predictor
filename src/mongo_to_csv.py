@@ -9,7 +9,7 @@ import collections
 from riot_api import RiotService
 
 from riot_api_cache import ApiCache
-from riot_data import Champion, Participant
+from riot_data import Champion, Participant, PlayerStats
 
 
 def parse_args():
@@ -53,11 +53,12 @@ def main():
             player_features.append("{}_{}_Champ".format(team, player))
             player_features.append("{}_{}_WinRate".format(team, player))
             player_features.append("{}_{}_Played".format(team, player))
+            player_features.append("{}_{}_TotalWinRate".format(team, player))
+            player_features.append("{}_{}_TotalPlayed".format(team, player))
             for summoner_spell_id in [1, 2]:
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
             player_features.append("{}_Damage_{}".format(team, damage_type))
-        # player_features.append("{}_FirstBlood".format(team))
     columns = ["QueueType", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
 
     # quickly load all player stats into RAM so we can join more quickly
@@ -81,23 +82,30 @@ def main():
             player_features = []
             for team in teams:
                 damage_types = collections.Counter()
-                first_blood_rate = 0.
 
                 for player in picks[team]:
                     assert isinstance(player, Participant)
                     player_features.append(riot_connection.get_champion_name(player.champion_id))
 
                     player_stats = riot_cache.get_player_stats(player.id, force_cache=True)
+                    assert isinstance(player_stats, PlayerStats)
 
                     damage_types.update(riot_cache.get_champion_damage_types(player.champion_id))
 
-                    remove_match=False
+                    remove_match = False
+                    remove_win = False
                     if player_stats.modify_date > match.creation_time:
-                        remove_match=True
+                        remove_match = True
+                        remove_win = (winner == team)
 
-                    player_features.append(player_stats.get_win_rate(player.champion_id, remove=remove_match, won=(winner == team)))
+                    # win rate on this champion
+                    player_features.append(player_stats.get_win_rate(player.champion_id, remove=remove_match, won=remove_win))
                     player_features.append(player_stats.get_games_played(player.champion_id, remove=remove_match))
-                    first_blood_rate += player_stats.get_first_blood_rate(player.champion_id)
+
+                    # win rate overall
+                    player_features.append(player_stats.totals.get_win_rate(remove_games=int(remove_match), remove_wins=int(remove_win)))
+                    player_features.append(player_stats.totals.get_played(remove_games=int(remove_match)))
+
 
                     for summoner_spell_id in player.spells:
                         player_features.append(riot_connection.get_summoner_spell_name(summoner_spell_id))
@@ -105,8 +113,6 @@ def main():
                 damage_sum = float(sum(damage_types.itervalues()))
                 for damage_type in ["magic", "physical", "true"]:
                     player_features.append(damage_types[damage_type] / damage_sum)
-                #
-                # player_features.append(first_blood_rate)
 
             is_blue_winner = int(winner == teams[0])
 
