@@ -150,9 +150,10 @@ class ApiCache(object):
                 max_records -= 1
             self.logger.info("%d players selected with earliest recrawl dates", previous_max_records - max_records)
 
-    def get_players(self):
+    def get_player_ids(self):
+        player_ids = set()
         for player_data in self.players.find({}):
-            yield Summoner(Envelope.unwrap(player_data).data)
+            player_ids.add(Summoner(Envelope.unwrap(player_data).data).id)
 
     def update_players(self, players):
         for player in players:

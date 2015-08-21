@@ -38,19 +38,18 @@ def main():
 
     try:
         success = collections.Counter()
-        for player in riot_cache.get_players():
-            assert isinstance(player, Summoner)
+        for player_id in riot_cache.get_player_ids():
 
             try:
-                player_stats = riot_connection.get_summoner_ranked_stats(player.id)
-                riot_cache.update_player_stats(player.id, player_stats)
+                player_stats = riot_connection.get_summoner_ranked_stats(player_id)
+                riot_cache.update_player_stats(player_id, player_stats)
                 success["update ranked success"] += 1
             except SummonerNotFoundError:
                 success["update ranked failure"] += 1
 
             try:
-                player_stats = riot_connection.get_summoner_summary_stats(player.id)
-                riot_cache.update_player_summary_stats(player.id, player_stats)
+                player_stats = riot_connection.get_summoner_summary_stats(player_id)
+                riot_cache.update_player_summary_stats(player_id, player_stats)
                 success["update summary success"] += 1
             except SummonerNotFoundError:
                 success["update summary failure"] += 1
