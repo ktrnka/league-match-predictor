@@ -9,7 +9,8 @@ import collections
 from riot_api import RiotService
 
 from riot_api_cache import ApiCache
-from riot_data import Champion, Participant, PlayerStats
+from riot_data import Champion, Participant, PlayerStats, ChampionStats
+from src import riot_data
 
 
 def parse_args():
@@ -92,19 +93,21 @@ def main():
 
                     damage_types.update(riot_cache.get_champion_damage_types(player.champion_id))
 
-                    remove_match = False
-                    remove_win = False
+                    remove_match = 0
+                    remove_win = 0
                     if player_stats.modify_date > match.creation_time:
-                        remove_match = True
-                        remove_win = (winner == team)
+                        remove_match = 1
+                        remove_win = 1 if winner == team else 0
+
+                    champion_stats = player_stats.get_champion_stats(player.champion_id)
 
                     # win rate on this champion
-                    player_features.append(player_stats.get_win_rate(player.champion_id, remove=remove_match, won=remove_win))
-                    player_features.append(player_stats.get_games_played(player.champion_id, remove=remove_match))
+                    player_features.append(champion_stats.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
+                    player_features.append(champion_stats.get_played(remove_games=remove_match))
 
                     # win rate overall
-                    player_features.append(player_stats.totals.get_win_rate(remove_games=int(remove_match), remove_wins=int(remove_win)))
-                    player_features.append(player_stats.totals.get_played(remove_games=int(remove_match)))
+                    player_features.append(player_stats.totals.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
+                    player_features.append(player_stats.totals.get_played(remove_games=remove_match))
 
 
                     for summoner_spell_id in player.spells:

@@ -253,6 +253,12 @@ class PlayerStats(object):
             return 0.
         return stats["totalFirstBlood"] / float(stats["totalSessionsPlayed"])
 
+    def get_champion_stats(self, champion_id):
+        try:
+            return ChampionStats(self.champion_stats[champion_id])
+        except KeyError:
+            return EMPTY_CHAMPION_STATS
+
 
 class ChampionStats(object):
     def __init__(self, data):
@@ -277,16 +283,37 @@ class ChampionStats(object):
         self.turret_kills = data["totalTurretsKilled"]
 
     def get_win_rate(self, remove_games=0, remove_wins=0, remove_stats=None):
+
         if remove_stats:
-            assert isinstance (remove_stats, ChampionStats)
+            assert isinstance(remove_stats, ChampionStats)
             remove_games += remove_stats.played
             remove_wins += remove_stats.won
+        assert remove_wins <= remove_games
 
-        return (self.won - remove_wins) / float(self.played - remove_games + 0.1)
+        # if either stat is inconsistent it must not be included in the data despite the timestmaps
+        if self.played < remove_games or self.won < remove_wins or (self.played - remove_games) < (self.won - remove_wins):
+            remove_games = 0
+            remove_wins = 0
+
+        if self.played - remove_games <= 0:
+            return 0.5
+
+        win_rate = (self.won - remove_wins) / float(self.played - remove_games + 0.1)
+        assert 0 <= win_rate <= 1
+        return win_rate
 
     def get_played(self, remove_games=0, remove_stats=None):
+        if self.played == 0:
+            return 0
+
         if remove_stats:
             assert isinstance (remove_stats, ChampionStats)
             remove_games += remove_stats.played
 
+        # if either stat is inconsistent it must not be included in the data despite the timestmaps
+        if self.played < remove_games:
+            remove_games = 0
+
         return self.played - remove_games
+
+EMPTY_CHAMPION_STATS = ChampionStats(collections.Counter())
