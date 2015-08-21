@@ -282,7 +282,7 @@ class ChampionStats(object):
             remove_games += remove_stats.played
             remove_wins += remove_stats.won
 
-        return (self.won - remove_wins) / float(self.played - remove_games)
+        return (self.won - remove_wins) / float(self.played - remove_games + 0.1)
 
     def get_played(self, remove_games=0, remove_stats=None):
         if remove_stats:
