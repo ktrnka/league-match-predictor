@@ -73,14 +73,21 @@ def update_summoner_stats(riot_cache, riot_connection):
         try:
             player_stats = riot_connection.get_summoner_ranked_stats(player.id)
             riot_cache.update_player_stats(player.id, player_stats)
-            success[True] += 1
+            success["update ranked success"] += 1
         except SummonerNotFoundError:
             # This actually happens quite often
             logger.debug("Player %d no stats, setting to empty stats", player.id)
             riot_cache.update_player_stats(player.id, {})
-            success[False] += 1
+            success["update ranked failure"] += 1
 
-    logger.info("Updating stats succeeded %d / %d times", success[True], success[True] + success[False])
+        try:
+            player_stats = riot_connection.get_summoner_summary_stats(player.id)
+            riot_cache.update_player_summary_stats(player.id, player_stats)
+            success["update summary success"] += 1
+        except SummonerNotFoundError:
+            success["update summary failure"] += 1
+
+    logger.info("Updating stats resulted in: {}".format(success.most_common()))
 
 
 def update_matches(riot_cache, riot_connection, queued_counts):

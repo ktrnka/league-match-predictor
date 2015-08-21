@@ -147,13 +147,24 @@ class RiotService(object):
 
     def get_summoner_ranked_stats(self, summoner_id):
         try:
-            self.request_types["stats/by-summoner"] += 1
+            self.request_types["stats/by-summoner/_/ranked"] += 1
             return self.request("v1.3/stats/by-summoner/{summonerId}/ranked".format(summonerId=summoner_id))
         except requests.exceptions.HTTPError as exc:
             if exc.response.status_code == 404:
                 raise SummonerNotFoundError()
             else:
                 raise exc
+
+    def get_summoner_summary_stats(self, summoner_id):
+        try:
+            self.request_types["stats/by-summoner/_/summary"] += 1
+            return self.request("v1.3/stats/by-summoner/{summonerId}/summary".format(summonerId=summoner_id))
+        except requests.exceptions.HTTPError as exc:
+            if exc.response.status_code == 404:
+                raise SummonerNotFoundError()
+            else:
+                raise exc
+
 
     def get_summoner_by_name(self, name):
         self.request_types["summoner/by-name"] += 1

@@ -150,6 +150,10 @@ class ApiCache(object):
                 max_records -= 1
             self.logger.info("%d players selected with earliest recrawl dates", previous_max_records - max_records)
 
+    def get_players(self):
+        for player_data in self.players.find({}):
+            yield Summoner(Envelope.unwrap(player_data).data)
+
     def update_players(self, players):
         for player in players:
             assert isinstance(player, Summoner)
@@ -161,6 +165,14 @@ class ApiCache(object):
         assert isinstance(player_stats, dict)
 
         result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.stats": player_stats}})
+        if result["ok"] != 1 or result["nModified"] != 1:
+            self.logger.error("Bad result in setting player stats: %s", result)
+
+    def update_player_summary_stats(self, player_id, player_stats):
+        assert isinstance(player_id, int)
+        assert isinstance(player_stats, dict)
+
+        result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.summary_stats": player_stats}})
         if result["ok"] != 1 or result["nModified"] != 1:
             self.logger.error("Bad result in setting player stats: %s", result)
 
