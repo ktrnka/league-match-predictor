@@ -80,19 +80,9 @@ def main():
 
     total_rates, champion_rates = aggregate_win_played_rates(riot_cache)
 
-    champion_primary_role, champion_dual_role = get_champion_roles(champion_rates, riot_connection)
-
     columns = [
         "OtherChampions_Played",
         "OtherChampions_WinRate",
-        "IsMainPrimaryRole",
-        "SamePriRole_Played",
-        "SamePriRole_PlayRate",
-        "SamePriRole_WinRate",
-        "IsMainDualRole",
-        "SameDualRole_Played",
-        "SameDualRole_PlayRate",
-        "SameDualRole_WinRate",
         "OtherPlayers_PlayRate",
         "OtherPlayers_WinRate",
         "PredictedPlayed",
@@ -105,49 +95,18 @@ def main():
         for player_stats in riot_cache.local_stats_cache.itervalues():
             assert isinstance(player_stats, PlayerStats)
 
-            # sum up the total stats and per-role stats
-            stats_by_best_tag = collections.defaultdict(collections.Counter)
-            stats_by_merged_tag = collections.defaultdict(collections.Counter)
-            for champion_id, champion_stats in player_stats.champion_stats.iteritems():
-                stats_by_best_tag[champion_primary_role[champion_id]].update(champion_stats)
-                stats_by_merged_tag[champion_dual_role[champion_id]].update(champion_stats)
-
-            stats_by_best_tag = {k: ChampionStats(v) for k, v in stats_by_best_tag.iteritems()}
-            stats_by_merged_tag = {k: ChampionStats(v) for k, v in stats_by_merged_tag.iteritems()}
-
             total_stats = player_stats.totals
-
-            main_pri_tag = max(stats_by_best_tag.keys(), key=lambda i: stats_by_best_tag[i].played)
-            main_dual_tag = max(stats_by_merged_tag.keys(), key=lambda i: stats_by_merged_tag[i].played)
 
             # each individual becomes one row
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
                 champion_stats = ChampionStats(champion_stats)
 
-                # remove the predicted fields
-                total_played = total_stats.played - champion_stats.played
-                total_won = total_stats.won - champion_stats.won
-
-                same_primary_played = stats_by_best_tag[champion_primary_role[champion_id]].played - champion_stats.played
-                same_primary_won = stats_by_best_tag[champion_primary_role[champion_id]].won - champion_stats.won
-
-                same_dual_played = stats_by_merged_tag[champion_dual_role[champion_id]].played - champion_stats.played
-                same_dual_won = stats_by_merged_tag[champion_dual_role[champion_id]].won - champion_stats.won
-
-                row = [total_played,
-                       total_won / float(total_played),
-                       main_pri_tag == champion_primary_role[champion_id],
-                       same_primary_played,
-                       same_primary_played / float(total_played),
-                       same_primary_won / float(same_primary_played + 0.01),
-                       main_dual_tag == champion_dual_role[champion_id],
-                       same_dual_played,
-                       same_dual_played / float(total_played),
-                       same_dual_won / float(same_dual_played + 0.01),
+                row = [total_stats.get_played(remove_stats=champion_stats),
+                       total_stats.get_win_rate(remove_stats=champion_stats),
                        (champion_rates[champion_id]["played"] - champion_stats.played) / float(total_rates["played"] - champion_stats.played),
                        (champion_rates[champion_id]["won"] - champion_stats.won) / float(champion_rates[champion_id]["played"] - champion_stats.played),
-                       champion_stats.played,
-                       champion_stats.won / float(champion_stats.played)]
+                       champion_stats.get_played(),
+                       champion_stats.get_win_rate()]
                 csv_out.write(",".join(str(x) for x in row) + "\n")
 
 
