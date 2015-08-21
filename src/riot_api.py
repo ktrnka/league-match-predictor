@@ -3,10 +3,10 @@ import collections
 import logging
 import time
 import urlparse
-
 import requests
 import requests.exceptions
-from riot_data import Summoner, Match
+
+import riot_data
 import utilities
 
 # error codes that happen cause a server is temporarily down/etc
@@ -168,7 +168,7 @@ class RiotService(object):
 
     def get_summoner_by_name(self, name):
         self.request_types["summoner/by-name"] += 1
-        return Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
+        return riot_data.Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
 
     @staticmethod
     def _filter_ids(id_list):
@@ -193,7 +193,7 @@ class RiotService(object):
             data = self.request("v1.4/summoner/by-name/{}".format(",".join(names)))
             self.request_types["summoner/by-name"] += 1
 
-        return [Summoner(s) for s in data.itervalues()]
+        return [riot_data.Summoner(s) for s in data.itervalues()]
 
     def get_featured_matches(self):
         data = self.request("featured", self.observer_base_url)
@@ -209,7 +209,7 @@ class RiotService(object):
 
         if data:
             for match in data["matches"]:
-                yield Match(match)
+                yield riot_data.Match(match)
 
     def get_summoner_spells(self):
         data = self.request_static("v1.2/summoner-spell")

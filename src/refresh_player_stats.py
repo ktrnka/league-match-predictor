@@ -1,12 +1,12 @@
 from __future__ import unicode_literals
 import ConfigParser
 import argparse
+import logging
 import sys
-import datetime
+import collections
 
-from riot_api import *
-from riot_api_cache import ApiCache
-from riot_data import Participant, Match
+import riot_api
+import riot_api_cache
 import requests.exceptions
 
 
@@ -33,8 +33,8 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    riot_connection = RiotService.from_config(config)
-    riot_cache = ApiCache(config)
+    riot_connection = riot_api.RiotService.from_config(config)
+    riot_cache = riot_api_cache.ApiCache(config)
 
     try:
         success = collections.Counter()
@@ -44,14 +44,14 @@ def main():
                 player_stats = riot_connection.get_summoner_ranked_stats(player_id)
                 riot_cache.update_player_stats(player_id, player_stats)
                 success["update ranked success"] += 1
-            except SummonerNotFoundError:
+            except riot_api.SummonerNotFoundError:
                 success["update ranked failure"] += 1
 
             try:
                 player_stats = riot_connection.get_summoner_summary_stats(player_id)
                 riot_cache.update_player_summary_stats(player_id, player_stats)
                 success["update summary success"] += 1
-            except SummonerNotFoundError:
+            except riot_api.SummonerNotFoundError:
                 success["update summary failure"] += 1
 
         print "Player update outcomes: {}".format(success.most_common())

@@ -7,8 +7,7 @@ import argparse
 
 import pymongo
 
-from riot_data import Summoner, Match, ChampionStats
-from riot_data import PlayerStats
+import riot_data
 
 
 _ENVELOPE_UPDATED_DATE = "updated"
@@ -68,7 +67,7 @@ class ApiCache(object):
 
 
     def queue_match(self, match):
-        assert isinstance(match, Match)
+        assert isinstance(match, riot_data.Match)
 
         match_data = self.matches.find_one(Envelope.query_data({"matchId": match.id}))
 
@@ -83,7 +82,7 @@ class ApiCache(object):
             return False
 
     def queue_player(self, player):
-        assert isinstance(player, Summoner)
+        assert isinstance(player, riot_data.Summoner)
         if not player.id:
             self.logger.error("ID is null: {}".format(player))
             return
@@ -107,31 +106,31 @@ class ApiCache(object):
     def get_queued_matches(self, max_records):
         # ranked 5v5
         previous_max_records = max_records
-        for match_data in self.matches.find({"queued": True, "data.queueType": Match.QUEUE_RANKED_5}).limit(max_records):
+        for match_data in self.matches.find({"queued": True, "data.queueType": riot_data.Match.QUEUE_RANKED_5}).limit(max_records):
             yield match_data
             max_records -= 1
-        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, Match.QUEUE_RANKED_5)
+        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, riot_data.Match.QUEUE_RANKED_5)
 
         # solo 5v5
         previous_max_records = max_records
         if max_records > 0:
-            for match_data in self.matches.find({"queued": True, "data.queueType": Match.QUEUE_RANKED_SOLO}).limit(max_records):
+            for match_data in self.matches.find({"queued": True, "data.queueType": riot_data.Match.QUEUE_RANKED_SOLO}).limit(max_records):
                 yield match_data
                 max_records -= 1
-        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, Match.QUEUE_RANKED_SOLO)
+        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, riot_data.Match.QUEUE_RANKED_SOLO)
 
     def get_players_recrawl(self, max_records):
         """Get an iterable of players to recrawl for match history or other purposes"""
         previous_max_records = max_records
         for player_data in self.players.find({"recrawl_at": None}).limit(max_records):
-            yield Summoner(Envelope.unwrap(player_data).data)
+            yield riot_data.Summoner(Envelope.unwrap(player_data).data)
             max_records -= 1
         self.logger.info("%d players without recrawl specified", previous_max_records - max_records)
 
         if max_records > 0:
             previous_max_records = max_records
             for player_data in self.players.find({"recrawl_at": {"$ne": None}}).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
-                yield Summoner(Envelope.unwrap(player_data).data)
+                yield riot_data.Summoner(Envelope.unwrap(player_data).data)
                 max_records -= 1
             self.logger.info("%d players selected from earliest recrawl dates", previous_max_records - max_records)
 
@@ -139,7 +138,7 @@ class ApiCache(object):
         """Get an iterable of players that need their stats object updated"""
         previous_max_records = max_records
         for player_data in self.players.find(Envelope.query_data({"stats": {"$exists": False}})).limit(max_records):
-            yield Summoner(Envelope.unwrap(player_data).data)
+            yield riot_data.Summoner(Envelope.unwrap(player_data).data)
             max_records -= 1
         self.logger.info("%d players without stats data", previous_max_records - max_records)
 
@@ -147,20 +146,20 @@ class ApiCache(object):
             previous_max_records = max_records
             # TODO: This is hijacking the "recrawl_at" field to be used for both match history and summoner stats
             for player_data in self.players.find(Envelope.query_data({"stats": {"$exists": True}})).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
-                yield Summoner(Envelope.unwrap(player_data).data)
+                yield riot_data.Summoner(Envelope.unwrap(player_data).data)
                 max_records -= 1
             self.logger.info("%d players selected with earliest recrawl dates", previous_max_records - max_records)
 
     def get_player_ids(self):
         player_ids = set()
         for player_data in self.players.find({}):
-            player_ids.add(Summoner(Envelope.unwrap(player_data).data).id)
+            player_ids.add(riot_data.Summoner(Envelope.unwrap(player_data).data).id)
 
         return player_ids
 
     def update_players(self, players):
         for player in players:
-            assert isinstance(player, Summoner)
+            assert isinstance(player, riot_data.Summoner)
             self.logger.debug("Updating %d -> %s", player.id, player.name)
             self.players.update(Envelope.query_data({"id": player.id}), Envelope.wrap(player.export(), False))
 
@@ -187,16 +186,16 @@ class ApiCache(object):
             if player_id not in self.local_stats_cache:
                 try:
                     result = self.players.find_one(Envelope.query_data({"id": player_id}))
-                    self.local_stats_cache[player_id] = PlayerStats(result["data"]["stats"])
+                    self.local_stats_cache[player_id] = riot_data.PlayerStats(result["data"]["stats"])
                 except (TypeError, KeyError):
-                    self.local_stats_cache[player_id] = PlayerStats.make_blank()
+                    self.local_stats_cache[player_id] = riot_data.PlayerStats.make_blank()
 
         return self.local_stats_cache[player_id]
 
     def preload_player_stats(self):
-        self.local_stats_cache = collections.defaultdict(PlayerStats.make_blank)
+        self.local_stats_cache = collections.defaultdict(riot_data.PlayerStats.make_blank)
         for result in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
-            self.local_stats_cache[result["data"]["id"]] = PlayerStats(result["data"]["stats"])
+            self.local_stats_cache[result["data"]["id"]] = riot_data.PlayerStats(result["data"]["stats"])
 
     def update_match_history_refresh(self, player, recrawl_date):
         result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
@@ -210,7 +209,7 @@ class ApiCache(object):
         self.logger.info("Removed %d objects for match id %d", result.deleted_count, match_id)
 
     def remove_player(self, player):
-        assert isinstance(player, Summoner)
+        assert isinstance(player, riot_data.Summoner)
 
         result = self.players.delete_one(Envelope.query_data({"id": player.id}))
         self.logger.info("Removed %d objects for player {}".format(player), result.deleted_count)
@@ -240,7 +239,7 @@ class ApiCache(object):
 
     def compact(self):
         # remove any matches from queues we don't care about
-        result = self.matches.remove({"data.queueType": {"$nin": [Match.QUEUE_RANKED_5, Match.QUEUE_RANKED_SOLO]}})
+        result = self.matches.remove({"data.queueType": {"$nin": [riot_data.Match.QUEUE_RANKED_5, riot_data.Match.QUEUE_RANKED_SOLO]}})
         self.logger.info("Result from removing matches from queues we don't care about: %s", result)
 
         result = self.matches.update(Envelope.query_queued(False), {"$unset": make_unset()}, multi=True)
@@ -248,7 +247,7 @@ class ApiCache(object):
 
     def get_matches(self):
         for match_data in self.matches.find(Envelope.query_queued(False)):
-            yield Match(match_data["data"])
+            yield riot_data.Match(match_data["data"])
 
     def precompute_champion_damage(self):
         play_rates = collections.Counter()
@@ -273,13 +272,13 @@ class ApiCache(object):
         champion_data = collections.defaultdict(collections.Counter)
 
         for player_stats in self.local_stats_cache.itervalues():
-            assert isinstance(player_stats, PlayerStats)
+            assert isinstance(player_stats, riot_data.PlayerStats)
 
             for champion_id, champion_stats_dict in player_stats.champion_stats.iteritems():
                 total_data.update(champion_stats_dict)
                 champion_data[champion_id].update(champion_stats_dict)
 
-        return ChampionStats(total_data), {k: ChampionStats(v) for k, v in champion_data.iteritems()}
+        return riot_data.ChampionStats(total_data), {k: riot_data.ChampionStats(v) for k, v in champion_data.iteritems()}
 
 
 def parse_args():

@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 import sys
 import argparse
 
-from src.riot_api_cache import make_unset
+import riot_api_cache
 
 
 def parse_args():
@@ -13,7 +13,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    print "{" + ", ".join('"{}": {}'.format(field, value) for field, value in make_unset().items()) + "}"
+    print "{" + ", ".join('"{}": {}'.format(field, value) for field, value in riot_api_cache.make_unset().items()) + "}"
 
 
 

@@ -1,12 +1,14 @@
 from __future__ import unicode_literals
 import ConfigParser
 import argparse
+import logging
 import sys
 import datetime
+import collections
 
-from riot_api import *
-from riot_api_cache import ApiCache
-from riot_data import Participant, Match
+import riot_api
+import riot_api_cache
+import riot_data
 import requests.exceptions
 
 EPOCH = datetime.datetime.utcfromtimestamp(0)
@@ -33,7 +35,7 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
 
     games, _ = riot_connection.get_featured_matches()
     for game_data in games:
-        match = Match.from_featured(game_data)
+        match = riot_data.Match.from_featured(game_data)
 
         if riot_cache.queue_match(match):
             queued_counts["match"] += 1
@@ -68,13 +70,13 @@ def update_summoner_stats(riot_cache, riot_connection):
     logger.info("Updating summoner stats, up to %d", max_players)
     success = collections.Counter()
     for player in riot_cache.get_queued_players_stats(max_players):
-        assert isinstance(player, Summoner)
+        assert isinstance(player, riot_data.Summoner)
 
         try:
             player_stats = riot_connection.get_summoner_ranked_stats(player.id)
             riot_cache.update_player_stats(player.id, player_stats)
             success["update ranked success"] += 1
-        except SummonerNotFoundError:
+        except riot_api.SummonerNotFoundError:
             # This actually happens quite often
             logger.debug("Player %d no stats, setting to empty stats", player.id)
             riot_cache.update_player_stats(player.id, {})
@@ -84,7 +86,7 @@ def update_summoner_stats(riot_cache, riot_connection):
             player_stats = riot_connection.get_summoner_summary_stats(player.id)
             riot_cache.update_player_summary_stats(player.id, player_stats)
             success["update summary success"] += 1
-        except SummonerNotFoundError:
+        except riot_api.SummonerNotFoundError:
             success["update summary failure"] += 1
 
     logger.info("Updating stats resulted in: {}".format(success.most_common()))
@@ -106,7 +108,7 @@ def update_matches(riot_cache, riot_connection, queued_counts):
             riot_cache.update_match(match_info)
 
             try:
-                parsed_match = Match(match_info)
+                parsed_match = riot_data.Match(match_info)
                 for player in parsed_match.players:
                     if player.id:
                         if riot_cache.queue_player(player.to_summoner()):
@@ -146,7 +148,7 @@ def queue_from_match_histories(riot_cache, riot_connection, queued_counts):
     logger.info("Fetching match history for queued summoners, up to %d", max_players)
 
     for player in riot_cache.get_players_recrawl(max_players):
-        assert isinstance(player, Summoner)
+        assert isinstance(player, riot_data.Summoner)
 
         try:
             matches = list(riot_connection.get_match_history(player.id))
@@ -157,7 +159,7 @@ def queue_from_match_histories(riot_cache, riot_connection, queued_counts):
             if matches:
                 riot_cache.update_match_history_refresh(player, get_recrawl_date(matches))
 
-        except InvalidIdError:
+        except riot_api.InvalidIdError:
             logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
             riot_cache.remove_player(player)
 
@@ -178,8 +180,8 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    riot_connection = RiotService.from_config(config)
-    riot_cache = ApiCache(config)
+    riot_connection = riot_api.RiotService.from_config(config)
+    riot_cache = riot_api_cache.ApiCache(config)
 
     try:
         queued_counts = collections.Counter()

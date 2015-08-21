@@ -6,11 +6,10 @@ import argparse
 import io
 import time
 import collections
-from riot_api import RiotService
 
-from riot_api_cache import ApiCache
-from riot_data import Champion, Participant, PlayerStats, ChampionStats
-from src import riot_data
+import riot_api
+import riot_api_cache
+import riot_data
 
 
 def parse_args():
@@ -22,11 +21,11 @@ def parse_args():
 
 
 def champion_set_to_indicators(champion_ids):
-    return [int(i in champion_ids) for i in Champion.known_ids]
+    return [int(i in champion_ids) for i in riot_data.Champion.known_ids]
 
 
 def make_champion_indicator_names(riot_connection):
-    return [riot_connection.get_champion_info(champion_id)["name"] for champion_id in Champion.known_ids]
+    return [riot_connection.get_champion_info(champion_id)["name"] for champion_id in riot_data.Champion.known_ids]
 
 
 def main():
@@ -45,8 +44,8 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    riot_cache = ApiCache(config)
-    riot_connection = RiotService.from_config(config)
+    riot_cache = riot_api_cache.ApiCache(config)
+    riot_connection = riot_api.RiotService.from_config(config)
 
     player_features = []
     for team in ["Blue", "Red"]:
@@ -90,11 +89,11 @@ def main():
                 damage_types = collections.Counter()
 
                 for player in picks[team]:
-                    assert isinstance(player, Participant)
+                    assert isinstance(player, riot_data.Participant)
                     player_features.append(riot_connection.get_champion_name(player.champion_id))
 
                     player_stats = riot_cache.get_player_stats(player.id, force_cache=True)
-                    assert isinstance(player_stats, PlayerStats)
+                    assert isinstance(player_stats, riot_data.PlayerStats)
 
                     damage_types.update(riot_cache.get_champion_damage_types(player.champion_id))
 

@@ -5,11 +5,10 @@ import sys
 import argparse
 import io
 import time
-import collections
-from riot_api import RiotService
 
-from riot_api_cache import ApiCache
-from riot_data import Champion, Participant, PlayerStats, ChampionStats
+import riot_api
+import riot_api_cache
+import riot_data
 
 
 def parse_args():
@@ -52,8 +51,8 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    riot_cache = ApiCache(config)
-    riot_connection = RiotService.from_config(config)
+    riot_cache = riot_api_cache.ApiCache(config)
+    riot_connection = riot_api.RiotService.from_config(config)
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
@@ -76,13 +75,13 @@ def main():
         csv_out.write(",".join(columns) + "\n")
 
         for player_stats in riot_cache.local_stats_cache.itervalues():
-            assert isinstance(player_stats, PlayerStats)
+            assert isinstance(player_stats, riot_data.PlayerStats)
 
             total_stats = player_stats.totals
 
             # each individual becomes one row
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
-                champion_stats = ChampionStats(champion_stats)
+                champion_stats = riot_data.ChampionStats(champion_stats)
 
                 row = [total_stats.get_played(remove_stats=champion_stats),
                        total_stats.get_win_rate(remove_stats=champion_stats),

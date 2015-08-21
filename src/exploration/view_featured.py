@@ -6,8 +6,8 @@ import math
 import sys
 
 import collections
-from src.riot_api import RiotService
-from src.riot_data import Participant
+import riot_api
+import riot_data
 
 
 def parse_args():
@@ -24,7 +24,7 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    connection = RiotService.from_config(config)
+    connection = riot_api.RiotService.from_config(config)
 
     games, refresh_interval = connection.get_featured_matches()
 
@@ -35,7 +35,7 @@ def main():
 
         for player in game["participants"]:
             # print "{} team: {}".format(connection.get_team_name(player["teamId"]), player["summonerName"])
-            player = Participant(player)
+            player = riot_data.Participant(player)
             champion_name = connection.get_champion_info(player.champion_id)["name"]
 
             try:

@@ -6,7 +6,7 @@ import sys
 import argparse
 import math
 
-from riot_api import RiotService
+import riot_api
 
 
 def parse_args():
@@ -24,7 +24,7 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    connection = RiotService.from_config(config)
+    connection = riot_api.RiotService.from_config(config)
     data = connection.get_match(args.match_id)
 
     teams = data["teams"]
