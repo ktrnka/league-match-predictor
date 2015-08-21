@@ -64,7 +64,7 @@ def update_summoners(riot_cache, riot_connection, queued_counts):
 def update_summoner_stats(riot_cache, riot_connection):
     logger = logging.getLogger(__name__)
 
-    max_players = 500
+    max_players = 1000
     logger.info("Updating summoner stats, up to %d", max_players)
     success = collections.Counter()
     for player in riot_cache.get_queued_players_stats(max_players):

@@ -145,6 +145,7 @@ class ApiCache(object):
 
         if max_records > 0:
             previous_max_records = max_records
+            # TODO: This is hijacking the "recrawl_at" field to be used for both match history and summoner stats
             for player_data in self.players.find(Envelope.query_data({"stats": {"$exists": True}})).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
                 yield Summoner(Envelope.unwrap(player_data).data)
                 max_records -= 1
