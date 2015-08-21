@@ -109,7 +109,7 @@ def update_matches(riot_cache, riot_connection, queued_counts):
                 parsed_match = Match(match_info)
                 for player in parsed_match.players:
                     if player.id:
-                        if riot_cache.queue_player(player):
+                        if riot_cache.queue_player(player.to_summoner()):
                             queued_counts["player"] += 1
                 outcomes["parsed match and added players"] += 1
             except KeyError:

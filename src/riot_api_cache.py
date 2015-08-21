@@ -155,6 +155,8 @@ class ApiCache(object):
         for player_data in self.players.find({}):
             player_ids.add(Summoner(Envelope.unwrap(player_data).data).id)
 
+        return player_ids
+
     def update_players(self, players):
         for player in players:
             assert isinstance(player, Summoner)

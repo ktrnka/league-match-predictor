@@ -49,6 +49,10 @@ class Summoner:
     def __str__(self):
         return "{}__{}".format(self.name, self.id)
 
+    @staticmethod
+    def from_fields(id, name):
+        return Summoner({"id": id, "name": name})
+
 
 class Participant(object):
     def __init__(self, team_id, spells, champion_id, name, id=None, tier=None, participant_id=None):
@@ -61,16 +65,14 @@ class Participant(object):
 
         self.id = id
         self.tier = tier
-        self.participant_id = None
+        self.participant_id = participant_id
+
+    def to_summoner(self):
+        return Summoner.from_fields(self.id, self.name)
 
     @staticmethod
     def from_joined(data):
         return Participant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["summonerName"])
-
-    @staticmethod
-    def from_match_participant(data):
-        return Participant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["participantId"], data["highestAchievedSeasonTier"])
-
 
     @staticmethod
     def parse_participants(participants, participant_identities):
