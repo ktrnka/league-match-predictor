@@ -223,14 +223,14 @@ class PlayerStats(object):
     def get_win_rate(self, champion_id, remove=False, won=False):
         try:
             stats = self.get_champion(champion_id)
-            played = stats["totalSessionsPlayed"]
-            won = stats["totalSessionsWon"]
+            num_played = stats["totalSessionsPlayed"]
+            num_won = stats["totalSessionsWon"]
             if remove:
-                played -= 1
+                num_played -= 1
                 if won:
-                    won -= 1
+                    num_won -= 1
 
-            return won / float(played)
+            return num_won / float(num_played)
         except (KeyError, ZeroDivisionError):
             return 0.5
 
@@ -290,7 +290,7 @@ class ChampionStats(object):
             remove_wins += remove_stats.won
         assert remove_wins <= remove_games
 
-        # if either stat is inconsistent it must not be included in the data despite the timestmaps
+        # if any stat is inconsistent then the game(s) being removed can be ignored
         if self.played < remove_games or self.won < remove_wins or (self.played - remove_games) < (self.won - remove_wins):
             remove_games = 0
             remove_wins = 0
@@ -298,7 +298,7 @@ class ChampionStats(object):
         if self.played - remove_games <= 0:
             return 0.5
 
-        win_rate = (self.won - remove_wins) / float(self.played - remove_games + 0.1)
+        win_rate = (self.won - remove_wins) / float(self.played - remove_games)
         assert 0 <= win_rate <= 1
         return win_rate
 
@@ -310,7 +310,7 @@ class ChampionStats(object):
             assert isinstance (remove_stats, ChampionStats)
             remove_games += remove_stats.played
 
-        # if either stat is inconsistent it must not be included in the data despite the timestmaps
+        # if any stat is inconsistent then the game(s) being removed can be ignored
         if self.played < remove_games:
             remove_games = 0
 
