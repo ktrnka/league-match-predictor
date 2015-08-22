@@ -271,6 +271,8 @@ class ChampionStats(object):
         self.physical_damage = data["totalPhysicalDamageDealt"]
         self.total_damage = data["totalDamageDealt"]
 
+        self.damage_taken = data["totalDamageTaken"]
+
         self.kills = data["totalChampionKills"]
         self.deaths = data["totalDeathsPerSession"]
         self.assists = data["totalAssists"]
@@ -294,6 +296,16 @@ class ChampionStats(object):
             deaths -= remove_stats.deaths
 
         return (kills + assists + 1) / float(deaths + 1)
+
+    def get_damage_efficiency(self, remove_stats=None):
+        damage_dealt = self.total_damage
+        damage_taken = self.damage_taken
+
+        if remove_stats:
+            damage_dealt -= remove_stats.total_damage
+            damage_taken -= remove_stats.damage_taken
+
+        return (damage_dealt + 1) / float(damage_taken + 1)
 
     def get_win_rate(self, remove_games=0, remove_wins=0, remove_stats=None):
 

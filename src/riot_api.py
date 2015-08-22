@@ -181,7 +181,7 @@ class RiotService(object):
             data = self.request("v2.5/league/{}".format(league), additional_params={"type": queue})
 
             for entry in data["entries"]:
-                yield riot_data.Summoner.from_fields(entry["playerOrTeamId"], entry["playerOrTeamName"])
+                yield riot_data.Summoner.from_fields(int(entry["playerOrTeamId"]), entry["playerOrTeamName"])
 
     @staticmethod
     def _filter_ids(id_list):
