@@ -93,7 +93,7 @@ class ApiCache(object):
         if not player_data:
             self.new_players[True] += 1
             self.logger.debug("Queueing player %d", player.id)
-            self.players.insert_one(Envelope.wrap(player.export()))
+            self.players.insert_one(Envelope.wrap(player.export(), is_queued=(player.name is not None)))
             return True
         else:
             self.new_players[False] += 1

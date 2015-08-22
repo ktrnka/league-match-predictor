@@ -52,7 +52,7 @@ def update_summoner_names(riot_cache, riot_connection, queued_counts, min_player
     logger = logging.getLogger(__name__)
 
     max_players = max(min_players, queued_counts["player"] * 2) * 40
-    logger.info("Fetching queued summoners, up to %d", max_players)
+    logger.info("Fetching summoner names, up to %d", max_players)
 
     ids = []
     for player in riot_cache.get_queued(riot_cache.players, max_players):
@@ -192,7 +192,7 @@ def queue_master_plus(riot_cache, riot_connection, queued_counts):
             added_summoners += 1
             queued_counts["player"] += 1
 
-    logger.info("Added %d new summoners from crawling masters and challenger", added_summoners)
+    logger.info("Queued %d new summoners from crawling masters and challenger", added_summoners)
 
 
 def main():
@@ -219,9 +219,9 @@ def main():
 
         # find players from masters and challenger and add them
         queue_master_plus(riot_cache, riot_connection, queued_counts)
+        update_summoner_names(riot_cache, riot_connection, queued_counts)
 
         update_summoners(riot_cache, riot_connection, queued_counts)
-        update_summoner_names(riot_cache, riot_connection, queued_counts)
         update_matches(riot_cache, riot_connection, queued_counts)
 
         # queue up featured matches last because they will automatically fail to get match data for a while
