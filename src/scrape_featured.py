@@ -108,7 +108,8 @@ def update_summoners(riot_cache, riot_connection, queued_counts, min_players=200
     for player in riot_cache.get_players_recrawl(max_players):
         assert isinstance(player, riot_data.Summoner)
         if not isinstance(player.id, int):
-            logger.error("Player with non-int ID: {}".format(player))
+            # Error was triggered by a string ID which shouldn't be possible
+            logger.error("Player with non-int ID: {}, type={}".format(player, type(player.id)))
             continue
 
         # refresh ranked stats

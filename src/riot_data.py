@@ -44,7 +44,7 @@ class Summoner:
         self.name = data.get("name", None)
 
     def export(self):
-        return {"id": self.id, "name": self.name}
+        return {"id": int(self.id), "name": self.name}
 
     def __str__(self):
         return "{}__{}".format(self.name, self.id)
