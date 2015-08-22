@@ -100,7 +100,7 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
 def update_summoners(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
-    max_players = max(800, queued_counts["player"] * 2)
+    max_players = max(400, queued_counts["player"] * 2)
     logger.info("Updating ranked/summary stats and match history, up to %d players", max_players)
 
     refresh_outcomes = collections.Counter()
