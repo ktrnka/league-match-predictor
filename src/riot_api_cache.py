@@ -122,18 +122,21 @@ class ApiCache(object):
 
     def get_players_recrawl(self, max_records):
         """Get an iterable of players to recrawl for match history or other purposes"""
+        players = []
         previous_max_records = max_records
         for player_data in self.players.find({"recrawl_at": None}).limit(max_records):
-            yield riot_data.Summoner(Envelope.unwrap(player_data).data)
+            players.append(riot_data.Summoner(Envelope.unwrap(player_data).data))
             max_records -= 1
         self.logger.info("%d players without recrawl specified", previous_max_records - max_records)
 
         if max_records > 0:
             previous_max_records = max_records
             for player_data in self.players.find({"recrawl_at": {"$ne": None}}).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
-                yield riot_data.Summoner(Envelope.unwrap(player_data).data)
+                players.append(riot_data.Summoner(Envelope.unwrap(player_data).data))
                 max_records -= 1
             self.logger.info("%d players selected from earliest recrawl dates", previous_max_records - max_records)
+
+        return players
 
     def get_queued_players_stats(self, max_records):
         """Get an iterable of players that need their stats object updated"""
