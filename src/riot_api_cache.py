@@ -51,6 +51,7 @@ class Envelope(object):
 
 class ApiCache(object):
     def __init__(self, config):
+        self.outcomes = collections.Counter()
         self.champion_damages = collections.defaultdict(collections.Counter)
         self.mongo_client = pymongo.MongoClient(config.get("mongo", "uri"))
         self.mongo_db = self.mongo_client.get_default_database()
@@ -171,16 +172,20 @@ class ApiCache(object):
         assert isinstance(player_stats, dict)
 
         result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.stats": player_stats}})
-        if result["ok"] != 1 or result["nModified"] != 1:
+        if result["ok"] != 1 or result["n"] != 1:
             self.logger.error("Bad result in setting player stats: %s", result)
+        elif result["nModified"] == 0:
+            self.outcomes["ranked stats: identical update"] += 1
 
     def update_player_summary_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)
         assert isinstance(player_stats, dict)
 
         result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.summary_stats": player_stats}})
-        if result["ok"] != 1 or result["nModified"] != 1:
+        if result["ok"] != 1 or result["n"] != 1:
             self.logger.error("Bad result in setting player stats: %s", result)
+        elif result["nModified"] == 0:
+            self.outcomes["summary stats: identical update"] += 1
 
     def get_player_stats(self, player_id, force_cache=False):
         assert isinstance(player_id, int)
@@ -233,12 +238,14 @@ class ApiCache(object):
         return """
         {:,} players queued ({:.1f}% of {:,})
         {:,} matches queued ({:.1f}% of {:,})
+        Outcomes: {}
         """.format(players_queued,
                    100. * players_queued / players_total,
                    players_total,
                    matches_queued,
                    100. * matches_queued / matches_total,
-                   matches_total)
+                   matches_total,
+                   self.outcomes.most_common())
 
     def compact(self):
         # remove any matches from queues we don't care about

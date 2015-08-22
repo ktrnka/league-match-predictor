@@ -55,14 +55,14 @@ class RiotService(object):
         return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"),
                            config_parser.get("riot", "observer_base"), config_parser.get("riot", "api_key"))
 
-    def request(self, endpoint, base_url=None, tries_left=1, additional_params=None):
+    def request(self, endpoint, base_url=None, tries_left=1, additional_params=None, suppress_codes={}):
         params = _merge_params(self.params, additional_params)
         self.throttle()
         full_url = urlparse.urljoin(base_url or self.base_url, endpoint)
         response = requests.get(full_url, params=params)
         self.num_requests += 1
 
-        if response.status_code != HTTP_OK:
+        if response.status_code != HTTP_OK and response.status_code not in suppress_codes:
             self.logger.error("Request %s error code %d", full_url, response.status_code)
 
         if response.status_code in HTTP_TRANSIENT_ERRORS and tries_left > 0:
@@ -148,7 +148,7 @@ class RiotService(object):
     def get_summoner_ranked_stats(self, summoner_id):
         try:
             self.request_types["stats/by-summoner/_/ranked"] += 1
-            return self.request("v1.3/stats/by-summoner/{summonerId}/ranked".format(summonerId=summoner_id))
+            return self.request("v1.3/stats/by-summoner/{summonerId}/ranked".format(summonerId=summoner_id), suppress_codes={404: True})
         except requests.exceptions.HTTPError as exc:
             if exc.response.status_code == 404:
                 raise SummonerNotFoundError()

@@ -81,6 +81,7 @@ def refresh_summary_stats(riot_connection, riot_cache, player, outcome_counter):
     except riot_api.SummonerNotFoundError:
         outcome_counter["update summary failure"] += 1
 
+
 def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
     try:
         matches = list(riot_connection.get_match_history(player.id))
