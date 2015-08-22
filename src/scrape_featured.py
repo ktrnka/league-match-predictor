@@ -48,7 +48,7 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
         riot_cache.update_players(players)
 
 
-def update_summoners(riot_cache, riot_connection, queued_counts):
+def update_summoner_names(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
     max_players = max(100, queued_counts["player"] * 2) * 40
@@ -63,33 +63,69 @@ def update_summoners(riot_cache, riot_connection, queued_counts):
         riot_cache.update_players(players)
 
 
-def update_summoner_stats(riot_cache, riot_connection):
+def refresh_ranked_stats(riot_connection, riot_cache, player, outcome_counter):
+    try:
+        player_stats = riot_connection.get_summoner_ranked_stats(player.id)
+        riot_cache.update_player_stats(player.id, player_stats)
+        outcome_counter["update ranked success"] += 1
+    except riot_api.SummonerNotFoundError:
+        # This actually happens quite often
+        logger.debug("Player %d no stats, setting to empty stats", player.id)
+        riot_cache.update_player_stats(player.id, {})
+        outcome_counter["update ranked failure"] += 1
+
+
+def refresh_summary_stats(riot_connection, riot_cache, player, outcome_counter):
+    try:
+        player_stats = riot_connection.get_summoner_summary_stats(player.id)
+        riot_cache.update_player_summary_stats(player.id, player_stats)
+        outcome_counter["update summary success"] += 1
+    except riot_api.SummonerNotFoundError:
+        outcome_counter["update summary failure"] += 1
+
+def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
+    try:
+        matches = list(riot_connection.get_match_history(player.id))
+        for match in matches:
+            if riot_cache.queue_match(match):
+                queued_counts["match"] += 1
+
+        return matches
+    except riot_api.InvalidIdError:
+        logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
+        riot_cache.remove_player(player)
+
+    return None
+
+def update_summoners(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
-    max_players = 1000
-    logger.info("Updating summoner stats, up to %d", max_players)
-    success = collections.Counter()
-    for player in riot_cache.get_queued_players_stats(max_players):
+    max_players = max(800, queued_counts["player"] * 2)
+    logger.info("Updating ranked/summary stats and match history, up to %d players", max_players)
+
+    refresh_outcomes = collections.Counter()
+
+    for player in riot_cache.get_players_recrawl(max_players):
         assert isinstance(player, riot_data.Summoner)
 
-        try:
-            player_stats = riot_connection.get_summoner_ranked_stats(player.id)
-            riot_cache.update_player_stats(player.id, player_stats)
-            success["update ranked success"] += 1
-        except riot_api.SummonerNotFoundError:
-            # This actually happens quite often
-            logger.debug("Player %d no stats, setting to empty stats", player.id)
-            riot_cache.update_player_stats(player.id, {})
-            success["update ranked failure"] += 1
+        # refresh ranked stats
+        refresh_ranked_stats(riot_connection, riot_cache, player, refresh_outcomes)
 
-        try:
-            player_stats = riot_connection.get_summoner_summary_stats(player.id)
-            riot_cache.update_player_summary_stats(player.id, player_stats)
-            success["update summary success"] += 1
-        except riot_api.SummonerNotFoundError:
-            success["update summary failure"] += 1
+        # refresh summary stats
+        refresh_summary_stats(riot_connection, riot_cache, player, refresh_outcomes)
 
-    logger.info("Updating stats resulted in: {}".format(success.most_common()))
+        # refresh match history
+        matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player)
+
+        # set the recrawl date
+        if matches:
+            riot_cache.update_match_history_refresh(player, get_recrawl_date(matches))
+            refresh_outcomes["matches found, set recrawl"] += 1
+        else:
+            riot_cache.update_match_history_refresh(player, get_recrawl_delay(7))
+            refresh_outcomes["matches not found, set 7-day recrawl"] += 1
+
+    logger.info("Updating stats resulted in: {}".format(sorted(refresh_outcomes.items())))
 
 
 def update_matches(riot_cache, riot_connection, queued_counts):
@@ -140,28 +176,8 @@ def get_recrawl_date(matches):
     )
     return (recrawl - EPOCH).total_seconds()
 
-
-def queue_from_match_histories(riot_cache, riot_connection, queued_counts):
-    logger = logging.getLogger(__name__)
-
-    max_players = max(100, queued_counts["player"] * 2)
-    logger.info("Fetching match history for queued summoners, up to %d", max_players)
-
-    for player in riot_cache.get_players_recrawl(max_players):
-        assert isinstance(player, riot_data.Summoner)
-
-        try:
-            matches = list(riot_connection.get_match_history(player.id))
-            for match in matches:
-                if riot_cache.queue_match(match):
-                    queued_counts["match"] += 1
-
-            if matches:
-                riot_cache.update_match_history_refresh(player, get_recrawl_date(matches))
-
-        except riot_api.InvalidIdError:
-            logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
-            riot_cache.remove_player(player)
+def get_recrawl_delay(num_days):
+    return (datetime.datetime.now() - EPOCH + datetime.timedelta(days=num_days)).total_seconds()
 
 
 def main():
@@ -186,9 +202,8 @@ def main():
     try:
         queued_counts = collections.Counter()
 
-        update_summoner_stats(riot_cache, riot_connection)
-        queue_from_match_histories(riot_cache, riot_connection, queued_counts)
         update_summoners(riot_cache, riot_connection, queued_counts)
+        update_summoner_names(riot_cache, riot_connection, queued_counts)
         update_matches(riot_cache, riot_connection, queued_counts)
 
         # queue up featured matches last because they will automatically fail to get match data for a while
