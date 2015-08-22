@@ -48,10 +48,10 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
         riot_cache.update_players(players)
 
 
-def update_summoner_names(riot_cache, riot_connection, queued_counts):
+def update_summoner_names(riot_cache, riot_connection, queued_counts, min_players=100):
     logger = logging.getLogger(__name__)
 
-    max_players = max(100, queued_counts["player"] * 2) * 40
+    max_players = max(min_players, queued_counts["player"] * 2) * 40
     logger.info("Fetching queued summoners, up to %d", max_players)
 
     ids = []
@@ -97,10 +97,10 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
     return None
 
 
-def update_summoners(riot_cache, riot_connection, queued_counts):
+def update_summoners(riot_cache, riot_connection, queued_counts, min_players=200):
     logger = logging.getLogger(__name__)
 
-    max_players = max(400, queued_counts["player"] * 2)
+    max_players = max(min_players, queued_counts["player"] * 2)
     logger.info("Updating ranked/summary stats and match history, up to %d players", max_players)
 
     refresh_outcomes = collections.Counter()
@@ -128,10 +128,10 @@ def update_summoners(riot_cache, riot_connection, queued_counts):
     logger.info("Outcomes from refreshing summoners: {}".format(sorted(refresh_outcomes.items())))
 
 
-def update_matches(riot_cache, riot_connection, queued_counts):
+def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
     logger = logging.getLogger(__name__)
 
-    max_matches = max(600, queued_counts["match"] * 2)
+    max_matches = min(min_matches * 3, max(min_matches, queued_counts["match"] * 2))
     logger.info("Fetching queued matches, up to %d", max_matches)
 
     outcomes = collections.Counter()
@@ -162,7 +162,7 @@ def update_matches(riot_cache, riot_connection, queued_counts):
     logger.info("Outcomes from fetching queued matches: %s", outcomes.most_common())
 
 
-def get_recrawl_date(matches):
+def get_recrawl_date(matches, max_matches=15):
     date_format = "%Y-%m-%d %H:%M:%S"
 
     dates = [match.get_creation_datetime() for match in matches]
@@ -170,7 +170,7 @@ def get_recrawl_date(matches):
     end_date = datetime.datetime.now()
 
     rate = (end_date - start_date) / len(dates)
-    recrawl = end_date + rate * 15
+    recrawl = end_date + rate * max_matches
     logging.getLogger(__name__).debug("%d matches from %s to %s, setting recrawl date to %s",
                                      len(matches),
                                      start_date.strftime(date_format),
@@ -181,6 +181,18 @@ def get_recrawl_date(matches):
 
 def get_recrawl_delay(num_days):
     return (datetime.datetime.now() - EPOCH + datetime.timedelta(days=num_days)).total_seconds()
+
+
+def queue_master_plus(riot_cache, riot_connection, queued_counts):
+    logger = logging.getLogger(__name__)
+
+    added_summoners = 0
+    for summoner in riot_connection.get_master_plus_solo():
+        if riot_cache.queue_player(summoner):
+            added_summoners += 1
+            queued_counts["player"] += 1
+
+    logger.info("Added %d new summoners from crawling masters and challenger", added_summoners)
 
 
 def main():
@@ -204,6 +216,9 @@ def main():
 
     try:
         queued_counts = collections.Counter()
+
+        # find players from masters and challenger and add them
+        queue_master_plus(riot_cache, riot_connection, queued_counts)
 
         update_summoners(riot_cache, riot_connection, queued_counts)
         update_summoner_names(riot_cache, riot_connection, queued_counts)

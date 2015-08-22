@@ -165,10 +165,20 @@ class RiotService(object):
             else:
                 raise exc
 
-
     def get_summoner_by_name(self, name):
         self.request_types["summoner/by-name"] += 1
         return riot_data.Summoner(self.request("v1.4/summoner/by-name/{}".format(name)).values()[0])
+
+    def get_master_plus_solo(self, queue=riot_data.Match.QUEUE_RANKED_SOLO):
+        """
+        Get summoners in master or challenger. If team queue is specified the Summoners returned
+        will be the team ID and names.
+        """
+        for league in ["challenger", "master"]:
+            data = self.request("v2.5/league/{}".format(league), additional_params={"type": queue})
+
+            for entry in data["entries"]:
+                yield riot_data.Summoner.from_fields(entry["playerOrTeamId"], entry["playerOrTeamName"])
 
     @staticmethod
     def _filter_ids(id_list):
