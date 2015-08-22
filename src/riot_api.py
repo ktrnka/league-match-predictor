@@ -217,12 +217,15 @@ class RiotService(object):
         if not summoner_id or not isinstance(summoner_id, int):
             raise InvalidIdError("summoner_id must be a valid int")
 
-        data = self.request("v2.2/matchhistory/{}".format(summoner_id), additional_params={"endIndex": 15})
-        self.request_types["matchhistory"] += 1
+        try:
+            data = self.request("v2.2/matchhistory/{}".format(summoner_id), additional_params={"endIndex": 15})
+            self.request_types["matchhistory"] += 1
 
-        if data:
-            for match in data["matches"]:
-                yield riot_data.Match(match)
+            if data:
+                for match in data["matches"]:
+                    yield riot_data.Match(match)
+        except requests.HTTPError as exc:
+            self.logger.exception("Ignoring error in match history")
 
     def get_summoner_spells(self):
         data = self.request_static("v1.2/summoner-spell")
