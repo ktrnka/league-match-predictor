@@ -69,8 +69,6 @@ def refresh_ranked_stats(riot_connection, riot_cache, player, outcome_counter):
         riot_cache.update_player_stats(player.id, player_stats)
         outcome_counter["update ranked success"] += 1
     except riot_api.SummonerNotFoundError:
-        # This actually happens quite often
-        logger.debug("Player %d no stats, setting to empty stats", player.id)
         riot_cache.update_player_stats(player.id, {})
         outcome_counter["update ranked failure"] += 1
 
@@ -96,6 +94,7 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
         riot_cache.remove_player(player)
 
     return None
+
 
 def update_summoners(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
@@ -125,7 +124,7 @@ def update_summoners(riot_cache, riot_connection, queued_counts):
             riot_cache.update_match_history_refresh(player, get_recrawl_delay(7))
             refresh_outcomes["matches not found, set 7-day recrawl"] += 1
 
-    logger.info("Updating stats resulted in: {}".format(sorted(refresh_outcomes.items())))
+    logger.info("Outcomes from refreshing summoners: {}".format(sorted(refresh_outcomes.items())))
 
 
 def update_matches(riot_cache, riot_connection, queued_counts):
@@ -166,12 +165,15 @@ def get_recrawl_date(matches):
     date_format = "%Y-%m-%d %H:%M:%S"
 
     dates = [match.get_creation_datetime() for match in matches]
-    rate = (datetime.datetime.now() - min(dates)) / len(dates)
-    recrawl = max(dates) + rate * 15
+    start_date = min(dates)
+    end_date = datetime.datetime.now()
+
+    rate = (end_date - start_date) / len(dates)
+    recrawl = end_date + rate * 15
     logging.getLogger(__name__).debug("%d matches from %s to %s, setting recrawl date to %s",
                                      len(matches),
-                                     min(dates).strftime(date_format),
-                                     datetime.datetime.now(),
+                                     start_date.strftime(date_format),
+                                     end_date.strftime(date_format),
                                      recrawl.strftime(date_format)
     )
     return (recrawl - EPOCH).total_seconds()
