@@ -62,12 +62,15 @@ class RiotService(object):
         response = requests.get(full_url, params=params)
         self.num_requests += 1
 
-        if response.status_code != HTTP_OK and response.status_code not in suppress_codes:
+        # don't give messages for 200, 429, and any special ones that are expected like 404 sometimes
+        if response.status_code != HTTP_OK and response.status_code not in suppress_codes and response.status_code != RATE_LIMIT_ERROR:
             self.logger.error("Request %s error code %d", full_url, response.status_code)
 
+        # transient errors like 500 can be tried again
         if response.status_code in HTTP_TRANSIENT_ERRORS and tries_left > 0:
             return self.request(endpoint, base_url, tries_left=tries_left - 1, additional_params=additional_params)
 
+        # increase the delay exponentially for rate limit errors
         for exponential_level in xrange(1, 4):
             if response.status_code != RATE_LIMIT_ERROR:
                 break
