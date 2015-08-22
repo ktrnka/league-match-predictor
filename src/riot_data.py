@@ -284,6 +284,17 @@ class ChampionStats(object):
 
         self.turret_kills = data["totalTurretsKilled"]
 
+    def get_kda(self, remove_stats=None):
+        kills = self.kills
+        assists = self.assists
+        deaths = self.deaths
+        if remove_stats:
+            kills -= remove_stats.kills
+            assists -= remove_stats.assists
+            deaths -= remove_stats.deaths
+
+        return (kills + assists + 1) / float(deaths + 1)
+
     def get_win_rate(self, remove_games=0, remove_wins=0, remove_stats=None):
 
         if remove_stats:

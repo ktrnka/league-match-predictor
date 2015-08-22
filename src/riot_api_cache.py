@@ -64,7 +64,7 @@ class ApiCache(object):
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
 
-        self.local_stats_cache = dict()
+        self.ranked_stats_cache = dict()
 
 
     def queue_match(self, match):
@@ -194,19 +194,20 @@ class ApiCache(object):
         assert isinstance(player_id, int)
 
         if not force_cache:
-            if player_id not in self.local_stats_cache:
+            if player_id not in self.ranked_stats_cache:
                 try:
                     result = self.players.find_one(Envelope.query_data({"id": player_id}))
-                    self.local_stats_cache[player_id] = riot_data.PlayerStats(result["data"]["stats"])
+                    self.ranked_stats_cache[player_id] = riot_data.PlayerStats(result["data"]["stats"])
                 except (TypeError, KeyError):
-                    self.local_stats_cache[player_id] = riot_data.PlayerStats.make_blank()
+                    self.ranked_stats_cache[player_id] = riot_data.PlayerStats.make_blank()
 
-        return self.local_stats_cache[player_id]
+        return self.ranked_stats_cache[player_id]
 
     def preload_player_stats(self):
-        self.local_stats_cache = collections.defaultdict(riot_data.PlayerStats.make_blank)
+        self.ranked_stats_cache = collections.defaultdict(riot_data.PlayerStats.make_blank)
         for result in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
-            self.local_stats_cache[result["data"]["id"]] = riot_data.PlayerStats(result["data"]["stats"])
+            self.ranked_stats_cache[result["data"]["id"]] = riot_data.PlayerStats(result["data"]["stats"])
+
 
     def update_match_history_refresh(self, player, recrawl_date):
         result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
@@ -264,7 +265,7 @@ class ApiCache(object):
 
     def precompute_champion_damage(self):
         play_rates = collections.Counter()
-        for player_stats in self.local_stats_cache.itervalues():
+        for player_stats in self.ranked_stats_cache.itervalues():
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
                 num_played = float(champion_stats["totalSessionsPlayed"])
                 play_rates[champion_id] += num_played
@@ -284,7 +285,7 @@ class ApiCache(object):
         total_data = collections.Counter()
         champion_data = collections.defaultdict(collections.Counter)
 
-        for player_stats in self.local_stats_cache.itervalues():
+        for player_stats in self.ranked_stats_cache.itervalues():
             assert isinstance(player_stats, riot_data.PlayerStats)
 
             for champion_id, champion_stats_dict in player_stats.champion_stats.iteritems():

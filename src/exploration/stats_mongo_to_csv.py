@@ -65,6 +65,7 @@ def main():
     columns = [
         "OtherChampions_Played",
         "OtherChampions_WinRate",
+        "OtherChampions_KDA",
         "OtherPlayers_PlayRate",
         "OtherPlayers_WinRate",
         "PredictedPlayed",
@@ -74,7 +75,7 @@ def main():
     with io.open(args.output_csv, "w") as csv_out:
         csv_out.write(",".join(columns) + "\n")
 
-        for player_stats in riot_cache.local_stats_cache.itervalues():
+        for player_stats in riot_cache.ranked_stats_cache.itervalues():
             assert isinstance(player_stats, riot_data.PlayerStats)
 
             total_stats = player_stats.totals
@@ -85,6 +86,7 @@ def main():
 
                 row = [total_stats.get_played(remove_stats=champion_stats),
                        total_stats.get_win_rate(remove_stats=champion_stats),
+                       total_stats.get_kda(remove_stats=champion_stats),
                        (agg_champion_stats[champion_id].played - champion_stats.played) / float(agg_stats.played - champion_stats.played),
                        (agg_champion_stats[champion_id].won - champion_stats.won) / float(agg_champion_stats[champion_id].played - champion_stats.played),
                        champion_stats.get_played(),
