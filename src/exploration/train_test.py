@@ -92,12 +92,12 @@ def parse_args():
 def random_forest(X, y, data, split_iterator):
     forest = sklearn.ensemble.RandomForestClassifier(10)
     hyperparameter_space = {
-        "n_estimators": [100, 500],
-        "min_samples_split": [50, 100, 200],
-        "min_samples_leaf": [20, 30]
+        "n_estimators": [100],
+        "min_samples_split": [100],
+        "min_samples_leaf": [15]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=3, cv=split_iterator)
     grid_search.fit(X, y)
 
     print "Random forest"
@@ -117,11 +117,11 @@ def print_logistic_regression_feature_importances(column_names, classifier):
 def logistic_regression(X, y, data, split_iterator, pca=False):
     logistic = sklearn.linear_model.LogisticRegression()
     hyperparameter_space = {
-        "C": [0.005, 0.01, 0.02, 0.1, 1.],
+        "C": [0.1, 0.5, 1., 2, 4],
         "penalty": ["l2"]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=3, cv=split_iterator)
     grid_search.fit(X, y)
 
     print "Logistic regression"
@@ -132,7 +132,7 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
 
     # with feature scaling
     X_scaled = sklearn.preprocessing.scale(X)
-    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=3, cv=split_iterator)
     grid_search.fit(X_scaled, y)
 
     print "Logistic regression with feature scaling"
@@ -145,7 +145,7 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
         pca = sklearn.decomposition.PCA(n_components=num_components, copy=True, whiten=False)
         X_pca = pca.fit_transform(X)
 
-        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=-1, cv=split_iterator)
+        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=3, cv=split_iterator)
         grid_search.fit(X_pca, y)
 
         print "Logistic regression with PCA at {} components".format(num_components)
@@ -156,11 +156,11 @@ def elastic_net(X, y):
     train_X, test_X, train_y, test_y = sklearn.cross_validation.train_test_split(X, y, test_size=0.1, random_state=4)
     splits = sklearn.cross_validation.StratifiedShuffleSplit(train_y, 10)
 
-    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=-1, cv=splits, n_alphas=100)
+    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=3, cv=splits, n_alphas=100)
     grid_search.fit(train_X, train_y)
 
-    print "Elastic net on testing data", grid_search.score(test_X, test_y)
-    print "Elastic net on training data", grid_search.score(train_X, train_y)
+    print "Elastic net on testing data", sklearn.metrics.accuracy_score(test_y.astype(int), grid_search.predict(test_X).astype(int))
+    print "Elastic net on training data", sklearn.metrics.accuracy_score(train_y.astype(int), grid_search.predict(train_X).astype(int))
 
 
 
@@ -173,7 +173,7 @@ def gradient_boosting_exp(X, y, split_iterator):
         # "subsample": [0.8, 0.9, 1.]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=1, cv=split_iterator,
+    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=3, cv=split_iterator,
                                                    verbose=1)
     grid_search.fit(X, y)
 
@@ -205,6 +205,8 @@ def preprocess_features(data):
     print "Before preprocessing"
     data.info()
     print "Columns: " + ", ".join(sorted(data.columns))
+
+    data = data.drop(["GameVersion"], axis=1)
 
     for col in [c for c in data.columns if "Damage" in c]:
         #data[col] = pandas.qcut(data[col], 5)

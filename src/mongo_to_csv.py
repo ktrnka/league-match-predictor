@@ -61,7 +61,7 @@ def main():
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
             player_features.append("{}_Damage_{}".format(team, damage_type))
-    columns = ["QueueType", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
+    columns = ["QueueType", "GameVersion", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
@@ -127,7 +127,7 @@ def main():
 
             is_blue_winner = int(winner == teams[0])
 
-            row = [match.queue_type] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
+            row = [match.queue_type, match.version] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
             csv_out.write(",".join(str(x) for x in row) + "\n")
 
     logger.info("Pulling and converting data took %.1f sec", time.time() - previous_time)
