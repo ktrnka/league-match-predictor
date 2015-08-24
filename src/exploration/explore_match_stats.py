@@ -4,6 +4,7 @@ import collections
 import logging
 import sys
 import argparse
+import time
 import scrape_featured
 import riot_api
 import riot_api_cache
@@ -19,10 +20,12 @@ def explore_side(riot_cache):
     victor_counts = collections.Counter()
     victor_by_tier = collections.defaultdict(collections.Counter)
     victor_by_queue_tier = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+    victor_by_patch = collections.defaultdict(collections.Counter)
 
     for match in riot_cache.get_matches():
         victor_counts[match.get_winning_team_id()] += 1
         victor_by_tier[match.get_average_tier()][match.get_winning_team_id()] += 1
+        victor_by_patch[match.version][match.get_winning_team_id()] += 1
         victor_by_queue_tier[match.queue_type][match.get_average_tier()][match.get_winning_team_id()] += 1
 
     total_matches = sum(victor_counts.itervalues())
@@ -48,10 +51,25 @@ def explore_side(riot_cache):
             for team_id, win_count in tier_stats[tier].iteritems():
                 print "\t\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id), 100. * win_count / total_matches, total_matches)
 
+    patches = sorted(victor_by_patch.iterkeys())
+    for patch in patches:
+        total_matches = sum(victor_by_patch[patch].itervalues())
+
+        if total_matches < 1000:
+            continue
+
+        print "Patch {}".format(patch)
+
+        for team_id, win_count in victor_by_patch[patch].iteritems():
+            print "\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id), 100. * win_count / total_matches, total_matches)
+
+
+
 def explore_champions(riot_cache, riot_connection):
     victor_counts = collections.Counter()
     played_counts = collections.Counter()
 
+    # compute champion win rates from match history
     for match in riot_cache.get_matches():
         winner = match.get_winning_team_id()
 
@@ -61,11 +79,28 @@ def explore_champions(riot_cache, riot_connection):
             if team_id == winner:
                 victor_counts.update(champion_set)
 
+    # compute champion win rates from player histories
+    # quickly load all player stats into RAM so we can join more quickly
+    previous_time = time.time()
+    riot_cache.preload_player_stats()
+    riot_cache.precompute_champion_damage()
+    print "Preloading player stats took", time.time() - previous_time
+
+    agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
+
     print "Champion IDs found: {}".format(sorted(played_counts.keys()))
     champion_names = {i: riot_connection.get_champion_info(i)["name"] for i in played_counts.iterkeys()}
 
+    print "Champion stats"
     for champion_id in sorted(played_counts.iterkeys()):
-        print "{} [{}]: {:.1f}% win rate out of {:,} games played".format(champion_names[champion_id], champion_id, 100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
+        print "{} [{}]".format(champion_names[champion_id], champion_id)
+
+        print "\tMatch history: {:.1f}% win rate out of {:,} games played".format(100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
+        print "\tRanked stats:  {:.1f}% win rate out of {:,} games played".format(100. * agg_champion_stats[champion_id].get_win_rate(), agg_champion_stats[champion_id].get_played())
+
+    print "Total win rate from ranked stats:  {:.1f}%".format(100. * agg_stats.get_win_rate())
+    print "Total win rate from match history: {:.1f}%".format(100. * sum(victor_counts.values()) / sum(played_counts.values()))
+
 
 def main():
     args = scrape_featured.parse_args()
@@ -86,7 +121,7 @@ def main():
     riot_cache = riot_api_cache.ApiCache(config)
     riot_connection = riot_api.RiotService.from_config(config)
 
-    # explore_side(riot_cache)
+    explore_side(riot_cache)
     explore_champions(riot_cache, riot_connection)
 
 
