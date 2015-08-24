@@ -311,9 +311,18 @@ if __name__ == "__main__":
 def make_unset():
     """Make the proper dict of fields to unset from the match collection"""
     fields = []
+
+    # unset player-related fields
     for i in xrange(0, 10):
         for field in "stats runes masteries timeline".split():
             fields.append("data.participants.{}.{}".format(i, field))
+        fields.append("data.participantIdentities.{}.player.matchHistoryUri".format(i))
+        fields.append("data.participantIdentities.{}.player.profileIcon".format(i))
+
+    # unset team-related fields
+    for i in xrange(0, 2):
+        fields.append("data.teams.{}.vilemawKills".format(i))
+        fields.append("data.teams.{}.dominionVictoryScore".format(i))
 
     return {k: None for k in fields}
 

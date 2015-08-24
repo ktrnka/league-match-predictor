@@ -13,7 +13,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    print "{" + ", ".join('"{}": {}'.format(field, value) for field, value in riot_api_cache.make_unset().items()) + "}"
+    print "{" + ", ".join('"{}": {}'.format(field, 1) for field, _ in riot_api_cache.make_unset().items()) + "}"
 
 
 
