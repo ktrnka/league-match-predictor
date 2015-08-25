@@ -16,6 +16,7 @@ import sklearn.decomposition
 import sklearn.preprocessing
 from operator import itemgetter
 
+N_JOBS = 3
 
 def learning_curve(training_x, training_y, filename, classifier):
     """Make a learning graph and save it"""
@@ -93,11 +94,11 @@ def random_forest(X, y, data, split_iterator):
     forest = sklearn.ensemble.RandomForestClassifier(10)
     hyperparameter_space = {
         "n_estimators": [100],
-        "min_samples_split": [50, 100, 200],
-        "min_samples_leaf": [5, 15, 30]
+        "min_samples_split": [50],
+        "min_samples_leaf": [5]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=3, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X, y)
 
     print "Random forest"
@@ -121,7 +122,7 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
         "penalty": ["l2"]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=3, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X, y)
 
     print "Logistic regression"
@@ -132,7 +133,7 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
 
     # with feature scaling
     X_scaled = sklearn.preprocessing.scale(X)
-    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=3, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X_scaled, y)
 
     print "Logistic regression with feature scaling"
@@ -145,7 +146,7 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
         pca = sklearn.decomposition.PCA(n_components=num_components, copy=True, whiten=False)
         X_pca = pca.fit_transform(X)
 
-        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=3, cv=split_iterator)
+        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
         grid_search.fit(X_pca, y)
 
         print "Logistic regression with PCA at {} components".format(num_components)
@@ -156,7 +157,7 @@ def elastic_net(X, y):
     train_X, test_X, train_y, test_y = sklearn.cross_validation.train_test_split(X, y, test_size=0.1, random_state=4)
     splits = sklearn.cross_validation.StratifiedShuffleSplit(train_y, 10)
 
-    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=3, cv=splits, n_alphas=100)
+    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=N_JOBS, cv=splits, n_alphas=100)
     grid_search.fit(train_X, train_y)
 
     print "Elastic net on testing data", sklearn.metrics.accuracy_score(test_y.astype(int), grid_search.predict(test_X).astype(int))
@@ -173,7 +174,7 @@ def gradient_boosting_exp(X, y, split_iterator):
         # "subsample": [0.8, 0.9, 1.]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=3, cv=split_iterator,
+    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator,
                                                    verbose=1)
     grid_search.fit(X, y)
 
@@ -206,20 +207,20 @@ def preprocess_features(data):
     data.info()
     print "Columns: " + ", ".join(sorted(data.columns))
 
-    # data = data.drop(["GameVersion"], axis=1)
+    data = data.drop(["GameVersion"], axis=1)
 
     for col in [c for c in data.columns if "Damage" in c]:
         #data[col] = pandas.qcut(data[col], 5)
         data[col + "_qcut5"] = pandas.qcut(data[col], 5)
 
-    # data = data.drop([c for c in data.columns if "Champ" in c], axis=1)
+    data = data.drop([c for c in data.columns if "Champ" in c], axis=1)
     # convert the per-role champions into boolean indicators per side
     # e.g., Blue_1_Ahri, Blue_2_Ahri get merged into Blue_Ahri
-    for team in ["Blue", "Red"]:
-        cols = [col for col in data.columns if team in col and "Champ" in col]
-        indicator_dfs = [pandas.get_dummies(data[col], prefix=team) for col in cols]
-        merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
-        data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
+    # for team in ["Blue", "Red"]:
+    #     cols = [col for col in data.columns if team in col and "Champ" in col]
+    #     indicator_dfs = [pandas.get_dummies(data[col], prefix=team) for col in cols]
+    #     merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
+    #     data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
 
     # convert the per-role summoner spells into sums per side
     # e.g., Blue_1_Spell_1, (0-1) Blue_2_Spell_2 (0-1), ... get merged into Blue_Flash (0-5)
@@ -247,6 +248,11 @@ def preprocess_features(data):
         data = merge_roles(data, team, "_MatchHistPatchWinRate")
 
         data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
+
+    # a few diff features
+    for feature_suffix in ["_MatchHistPatchWinRate", "_MatchHistWinRate", "_GeneralWinRate", "_TotalWinRate", "_GeneralPlayRate"]:
+        data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
+        data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
 
     data = pandas.get_dummies(data)
 
