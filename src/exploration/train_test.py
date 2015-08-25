@@ -93,8 +93,8 @@ def random_forest(X, y, data, split_iterator):
     forest = sklearn.ensemble.RandomForestClassifier(10)
     hyperparameter_space = {
         "n_estimators": [100],
-        "min_samples_split": [100],
-        "min_samples_leaf": [15]
+        "min_samples_split": [50, 100, 200],
+        "min_samples_leaf": [5, 15, 30]
     }
 
     grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=3, cv=split_iterator)
@@ -206,20 +206,20 @@ def preprocess_features(data):
     data.info()
     print "Columns: " + ", ".join(sorted(data.columns))
 
-    data = data.drop(["GameVersion"], axis=1)
+    # data = data.drop(["GameVersion"], axis=1)
 
     for col in [c for c in data.columns if "Damage" in c]:
         #data[col] = pandas.qcut(data[col], 5)
         data[col + "_qcut5"] = pandas.qcut(data[col], 5)
 
-    data = data.drop([c for c in data.columns if "Champ" in c], axis=1)
-    # # convert the per-role champions into boolean indicators per side
-    # # e.g., Blue_1_Ahri, Blue_2_Ahri get merged into Blue_Ahri
-    # for team in ["Blue", "Red"]:
-    #     cols = [col for col in data.columns if team in col and "Champ" in col]
-    #     indicator_dfs = [pandas.get_dummies(data[col], prefix=team) for col in cols]
-    #     merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
-    #     data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
+    # data = data.drop([c for c in data.columns if "Champ" in c], axis=1)
+    # convert the per-role champions into boolean indicators per side
+    # e.g., Blue_1_Ahri, Blue_2_Ahri get merged into Blue_Ahri
+    for team in ["Blue", "Red"]:
+        cols = [col for col in data.columns if team in col and "Champ" in col]
+        indicator_dfs = [pandas.get_dummies(data[col], prefix=team) for col in cols]
+        merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
+        data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
 
     # convert the per-role summoner spells into sums per side
     # e.g., Blue_1_Spell_1, (0-1) Blue_2_Spell_2 (0-1), ... get merged into Blue_Flash (0-5)
@@ -243,6 +243,8 @@ def preprocess_features(data):
         data = merge_roles(data, team, "_WinRate")
         data = merge_roles(data, team, "_TotalWinRate")
         data = merge_roles(data, team, "_GeneralWinRate")
+        data = merge_roles(data, team, "_MatchHistWinRate")
+        data = merge_roles(data, team, "_MatchHistPatchWinRate")
 
         data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
 

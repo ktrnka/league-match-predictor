@@ -294,6 +294,24 @@ class ApiCache(object):
 
         return riot_data.ChampionStats(total_data), {k: riot_data.ChampionStats(v) for k, v in champion_data.iteritems()}
 
+    def aggregate_match_stats(self):
+
+        win_counts = collections.Counter()
+        play_rates = collections.Counter()
+
+        for match in self.get_matches():
+            for player in match.players:
+                for conditional_key in [player.champion_id, (match.version, player.champion_id)]:
+                    if player.team_id == match.get_winning_team_id():
+                        win_counts[conditional_key] += 1
+                    play_rates[conditional_key] += 1
+
+        win_rates = dict()
+        for key in play_rates.iterkeys():
+            win_rates[key] = win_counts[key] / float(play_rates[key])
+
+        return win_rates
+
 
 def parse_args():
     parser = argparse.ArgumentParser()

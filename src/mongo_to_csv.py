@@ -57,6 +57,8 @@ def main():
             player_features.append("{}_{}_GeneralWinRate".format(team, player))
             player_features.append("{}_{}_TotalWinRate".format(team, player))
             player_features.append("{}_{}_TotalPlayed".format(team, player))
+            player_features.append("{}_{}_MatchHistWinRate".format(team, player))
+            player_features.append("{}_{}_MatchHistPatchWinRate".format(team, player))
             for summoner_spell_id in [1, 2]:
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
@@ -69,6 +71,8 @@ def main():
     riot_cache.precompute_champion_damage()
 
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
+
+    champion_win_rates_match_history = riot_cache.aggregate_match_stats()
 
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
 
@@ -116,6 +120,12 @@ def main():
                     # win rate overall
                     player_features.append(player_stats.totals.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
                     player_features.append(player_stats.totals.get_played(remove_games=remove_match))
+
+                    # win rate from match histories
+                    player_features.append(champion_win_rates_match_history[player.champion_id])
+
+                    # win rate from match histories on this patch
+                    player_features.append(champion_win_rates_match_history.get((match.version, player.champion_id), champion_win_rates_match_history[player.champion_id]))
 
 
                     for summoner_spell_id in player.spells:

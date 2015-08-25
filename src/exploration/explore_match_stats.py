@@ -99,6 +99,7 @@ def explore_champions(riot_cache, riot_connection):
         print "\tRanked stats:  {:.1f}% win rate out of {:,} games played".format(100. * agg_champion_stats[champion_id].get_win_rate(), agg_champion_stats[champion_id].get_played())
 
     print "Total win rate from ranked stats:  {:.1f}%".format(100. * agg_stats.get_win_rate())
+    print "Total win rate from ranked stats2: {:.1f}%".format(100. * sum(v.won for v in agg_champion_stats.values()) / sum(v.played for v in agg_champion_stats.values()))
     print "Total win rate from match history: {:.1f}%".format(100. * sum(victor_counts.values()) / sum(played_counts.values()))
 
 
