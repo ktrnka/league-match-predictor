@@ -72,7 +72,7 @@ def main():
 
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
-    champion_win_rates_match_history = riot_cache.aggregate_match_stats()
+    champion_stats_match_history = riot_cache.aggregate_match_stats()
 
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
 
@@ -122,10 +122,13 @@ def main():
                     player_features.append(player_stats.totals.get_played(remove_games=remove_match))
 
                     # win rate from match histories
-                    player_features.append(champion_win_rates_match_history[player.champion_id])
+                    player_features.append(champion_stats_match_history[player.champion_id].get_win_rate(remove_games=remove_match, remove_wins=remove_win))
 
                     # win rate from match histories on this patch
-                    player_features.append(champion_win_rates_match_history.get((match.version, player.champion_id), champion_win_rates_match_history[player.champion_id]))
+                    patch_champ_stats = champion_stats_match_history.get((match.version, player.champion_id), None)
+                    if not patch_champ_stats or patch_champ_stats.get_played(remove_games=remove_match) == 0:
+                        patch_champ_stats = champion_stats_match_history[player.champion_id]
+                    player_features.append(patch_champ_stats.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
 
 
                     for summoner_spell_id in player.spells:

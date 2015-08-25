@@ -295,7 +295,7 @@ class ApiCache(object):
         return riot_data.ChampionStats(total_data), {k: riot_data.ChampionStats(v) for k, v in champion_data.iteritems()}
 
     def aggregate_match_stats(self):
-
+        """Get aggregated win rates by champion id and (version, champ id)"""
         win_counts = collections.Counter()
         play_rates = collections.Counter()
 
@@ -306,11 +306,11 @@ class ApiCache(object):
                         win_counts[conditional_key] += 1
                     play_rates[conditional_key] += 1
 
-        win_rates = dict()
+        win_stats = dict()
         for key in play_rates.iterkeys():
-            win_rates[key] = win_counts[key] / float(play_rates[key])
+            win_stats[key] = riot_data.ChampionStats.from_wins_played(win_counts[key], play_rates[key])
 
-        return win_rates
+        return win_stats
 
 
 def parse_args():

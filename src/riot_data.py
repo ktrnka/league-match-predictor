@@ -286,6 +286,13 @@ class ChampionStats(object):
 
         self.turret_kills = data["totalTurretsKilled"]
 
+    @staticmethod
+    def from_wins_played(num_wins, num_played):
+        data = collections.Counter()
+        data["totalSessionsPlayed"] = num_played
+        data["totalSessionsWon"] = num_wins
+        return ChampionStats(data)
+
     def get_kda(self, remove_stats=None):
         kills = self.kills
         assists = self.assists
