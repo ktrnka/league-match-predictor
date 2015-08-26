@@ -152,16 +152,17 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
         print "Logistic regression with PCA at {} components".format(num_components)
         print_tuning_scores(grid_search)
 
-def elastic_net(X, y):
+def elastic_net(X, y, split_iterator):
     # note that GridSearchCV doesn't work with ElasticNet; need to use ElasticNetCV to select alpha and such
-    train_X, test_X, train_y, test_y = sklearn.cross_validation.train_test_split(X, y, test_size=0.1, random_state=4)
-    splits = sklearn.cross_validation.StratifiedShuffleSplit(train_y, 10)
+    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=N_JOBS, cv=split_iterator, n_alphas=100)
+    grid_search.fit(X, y)
 
-    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=N_JOBS, cv=splits, n_alphas=100)
-    grid_search.fit(train_X, train_y)
+    print "Elastic net scores"
 
-    print "Elastic net on testing data", sklearn.metrics.accuracy_score(test_y.astype(int), grid_search.predict(test_X).astype(int))
-    print "Elastic net on training data", sklearn.metrics.accuracy_score(train_y.astype(int), grid_search.predict(train_X).astype(int))
+    for i, alpha in enumerate(grid_search.alphas_):
+        mse = grid_search.mse_path_[i, :]
+
+        print "\tAlpha {:.3f} = {:.2f}% +/- {:.2f}%".format(alpha, 100 * (1 - mse.mean()), 100 * mse.std())
 
 
 
@@ -293,7 +294,7 @@ def main():
         logistic_regression(X, y, data, cross_val_splits)
 
     if args.elastic:
-        elastic_net(X, y)
+        elastic_net(X, y, cross_val_splits)
 
     if args.xg:
         gradient_boosting_exp(X, y, cross_val_splits)
