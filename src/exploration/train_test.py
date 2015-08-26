@@ -191,13 +191,14 @@ def dataframe_to_ndarrays(data):
     return X, y
 
 
-def merge_roles(data, team, suffix, include_log_sum=False):
+def merge_roles(data, team, suffix, include_log_sum=False, include_sum=True):
     cols = [col for col in data.columns if team in col and col.endswith(suffix)]
     assert len(cols) == 5
 
-    data[team + suffix + "_Sum"] = data[cols].sum(axis=1)
+    if include_sum:
+        data[team + suffix + "_Sum"] = data[cols].sum(axis=1)
     if include_log_sum:
-        data[team + suffix + "_LogSum"] = numpy.log(data[team + suffix + "_Sum"] + 1)
+        data[team + suffix + "_LogSum"] = numpy.log(data[cols].sum(axis=1) + 1)
     data[team + suffix + "_Min"] = data[cols].min(axis=1)
     data[team + suffix + "_Max"] = data[cols].max(axis=1)
     return data.drop(cols, axis=1)
@@ -233,13 +234,8 @@ def preprocess_features(data):
 
     # merge win rates and such across the team
     for team in ["Blue", "Red"]:
-        # are they good at a weird champion?
-        # for i in range(1, 6):
-        #     data["{}_{}_DarkHorse".format(team, i)] = data["{}_{}_WinRate".format(team, i)] / data["{}_{}_GeneralPlayRate".format(team, i)]
-        # data = merge_roles(data, team, "_DarkHorse")
-
-        data = merge_roles(data, team, "_Played", include_log_sum=True)
-        data = merge_roles(data, team, "_TotalPlayed", include_log_sum=True)
+        data = merge_roles(data, team, "_Played", include_log_sum=True, include_sum=False)
+        data = merge_roles(data, team, "_TotalPlayed", include_log_sum=True, include_sum=False)
 
         data = merge_roles(data, team, "_GeneralPlayRate")
         data = merge_roles(data, team, "_WinRate")
@@ -249,20 +245,12 @@ def preprocess_features(data):
         data = merge_roles(data, team, "_MatchHistPatchWinRate")
 
         data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
+        data[team + "_Combined_MHPWR_LogP"] = data[team + "_MatchHistPatchWinRate_Sum"] * data[team + "_TotalPlayed_LogSum"]
 
     # a few diff features
     for feature_suffix in ["_MatchHistPatchWinRate", "_MatchHistWinRate", "_GeneralWinRate", "_TotalWinRate", "_GeneralPlayRate"]:
         data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
         data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
-
-        # convert the min and max features
-        data["Delta" + feature_suffix + "_Max-Min"] = data["Blue" + feature_suffix + "_Max"] - data["Red" + feature_suffix + "_Min"]
-        data["Delta" + feature_suffix + "_Min-Max"] = data["Blue" + feature_suffix + "_Min"] - data["Red" + feature_suffix + "_Max"]
-        data["Delta" + feature_suffix + "_Max-Max"] = data["Blue" + feature_suffix + "_Max"] - data["Red" + feature_suffix + "_Max"]
-        data["Delta" + feature_suffix + "_Min-Min"] = data["Blue" + feature_suffix + "_Min"] - data["Red" + feature_suffix + "_Min"]
-
-        # data = data.drop(["Blue" + feature_suffix + "_Max", "Blue" + feature_suffix + "_Min", "Red" + feature_suffix + "_Max", "Red" + feature_suffix + "_Min"], axis=1)
-
 
     data = pandas.get_dummies(data)
 
