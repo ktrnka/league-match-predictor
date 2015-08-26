@@ -255,6 +255,15 @@ def preprocess_features(data):
         data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
         data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
 
+        # convert the min and max features
+        data["Delta" + feature_suffix + "_Max-Min"] = data["Blue" + feature_suffix + "_Max"] - data["Red" + feature_suffix + "_Min"]
+        data["Delta" + feature_suffix + "_Min-Max"] = data["Blue" + feature_suffix + "_Min"] - data["Red" + feature_suffix + "_Max"]
+        data["Delta" + feature_suffix + "_Max-Max"] = data["Blue" + feature_suffix + "_Max"] - data["Red" + feature_suffix + "_Max"]
+        data["Delta" + feature_suffix + "_Min-Min"] = data["Blue" + feature_suffix + "_Min"] - data["Red" + feature_suffix + "_Min"]
+
+        # data = data.drop(["Blue" + feature_suffix + "_Max", "Blue" + feature_suffix + "_Min", "Red" + feature_suffix + "_Max", "Red" + feature_suffix + "_Min"], axis=1)
+
+
     data = pandas.get_dummies(data)
 
     # speeds up learning a little
