@@ -252,6 +252,13 @@ def preprocess_features(data):
         data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
         data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
 
+    data["Delta_Combined_WR_LP"] = data["Blue_Combined_WR_LP"] - data["Red_Combined_WR_LP"]
+    data = data.drop(["Blue_Combined_WR_LP", "Red_Combined_WR_LP"], axis=1)
+
+    data["Delta_Combined_MHPWR_LogP"] = data["Blue_Combined_MHPWR_LogP"] - data["Red_Combined_MHPWR_LogP"]
+    data = data.drop(["Blue_Combined_MHPWR_LogP", "Red_Combined_MHPWR_LogP"], axis=1)
+
+
     data = pandas.get_dummies(data)
 
     # speeds up learning a little
