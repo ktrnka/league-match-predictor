@@ -22,11 +22,16 @@ def explore_side(riot_cache):
     victor_by_queue_tier = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
     victor_by_patch = collections.defaultdict(collections.Counter)
 
+    queue_counts = collections.Counter()
+
     for match in riot_cache.get_matches():
         victor_counts[match.get_winning_team_id()] += 1
         victor_by_tier[match.get_average_tier()][match.get_winning_team_id()] += 1
         victor_by_patch[match.version][match.get_winning_team_id()] += 1
         victor_by_queue_tier[match.queue_type][match.get_average_tier()][match.get_winning_team_id()] += 1
+        queue_counts[match.queue_type] += 1
+
+    print "Queue counts", queue_counts.most_common()
 
     total_matches = sum(victor_counts.itervalues())
     for team_id, win_count in victor_counts.iteritems():
@@ -98,9 +103,9 @@ def explore_champions(riot_cache, riot_connection):
         print "\tMatch history: {:.1f}% win rate out of {:,} games played".format(100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
         print "\tRanked stats:  {:.1f}% win rate out of {:,} games played".format(100. * agg_champion_stats[champion_id].get_win_rate(), agg_champion_stats[champion_id].get_played())
 
-    print "Total win rate from ranked stats:  {:.1f}%".format(100. * agg_stats.get_win_rate())
+    print "Total win rate from ranked stats:  {:.1f}% in {:,} games".format(100. * agg_stats.get_win_rate(), agg_stats.get_played())
     print "Total win rate from ranked stats2: {:.1f}%".format(100. * sum(v.won for v in agg_champion_stats.values()) / sum(v.played for v in agg_champion_stats.values()))
-    print "Total win rate from match history: {:.1f}%".format(100. * sum(victor_counts.values()) / sum(played_counts.values()))
+    print "Total win rate from match history: {:.1f}% in {:,} games".format(100. * sum(victor_counts.values()) / sum(played_counts.values()), sum(played_counts.values()))
 
 
 def main():

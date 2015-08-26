@@ -289,6 +289,8 @@ class ApiCache(object):
             assert isinstance(player_stats, riot_data.PlayerStats)
 
             for champion_id, champion_stats_dict in player_stats.champion_stats.iteritems():
+                if champion_id == 0:
+                    continue
                 total_data.update(champion_stats_dict)
                 champion_data[champion_id].update(champion_stats_dict)
 
