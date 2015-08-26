@@ -175,8 +175,7 @@ def elastic_net(X, y, split_iterator):
 def gradient_boosting_exp(X, y, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
-        "learning_rate": [0.2],
-        "max_depth": [3],
+        "learning_rate": [0.2, 0.5],
         "min_samples_leaf": [1, 10, 20],
         # "subsample": [0.8, 0.9, 1.]
     }
@@ -197,16 +196,22 @@ def dataframe_to_ndarrays(data):
     return X, y
 
 
-def merge_roles(data, team, suffix, include_log_sum=False, include_sum=True):
+def merge_roles(data, team, suffix, include_log_sum=False, include_sum=True, include_min=True, include_max=True):
     cols = [col for col in data.columns if team in col and col.endswith(suffix)]
     assert len(cols) == 5
 
     if include_sum:
         data[team + suffix + "_Sum"] = data[cols].sum(axis=1)
+
     if include_log_sum:
         data[team + suffix + "_LogSum"] = numpy.log(data[cols].sum(axis=1) + 1)
-    data[team + suffix + "_Min"] = data[cols].min(axis=1)
-    data[team + suffix + "_Max"] = data[cols].max(axis=1)
+
+    if include_min:
+        data[team + suffix + "_Min"] = data[cols].min(axis=1)
+
+    if include_max:
+        data[team + suffix + "_Max"] = data[cols].max(axis=1)
+
     return data.drop(cols, axis=1)
 
 
@@ -242,8 +247,8 @@ def preprocess_features(data):
 
     # merge win rates and such across the team
     for team in ["Blue", "Red"]:
-        data = merge_roles(data, team, "_Played", include_log_sum=True, include_sum=False)
-        data = merge_roles(data, team, "_TotalPlayed", include_log_sum=True, include_sum=False)
+        data = merge_roles(data, team, "_Played", include_log_sum=True, include_sum=False, include_min=False)
+        data = merge_roles(data, team, "_TotalPlayed", include_log_sum=True, include_sum=False, include_min=False)
 
         data = merge_roles(data, team, "_GeneralPlayRate")
         data = merge_roles(data, team, "_WinRate")
@@ -269,18 +274,12 @@ def preprocess_features(data):
 
     data = pandas.get_dummies(data)
 
-    # speeds up learning a little
-    data = data.drop([c for c in data.columns if is_dropped_column(c)], axis=1)
-
     print "After preprocessing"
     data.info()
     print data.describe()
     print "Columns: " + ", ".join(sorted(data.columns))
 
     return data
-
-def is_dropped_column(column_name):
-    return "_TotalWinRate_Min" in column_name or "_Played_Min" in column_name or "_TotalPlayed_Min" in column_name
 
 
 def check_data(X, y):
