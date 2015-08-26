@@ -18,7 +18,7 @@ from operator import itemgetter
 
 N_JOBS = 3
 
-def learning_curve(training_x, training_y, filename, classifier):
+def learning_curve(training_x, training_y, filename, classifier, classifier_name):
     """Make a learning graph and save it"""
     split_iterator = sklearn.cross_validation.StratifiedShuffleSplit(training_y, n_iter=10, random_state=4)
     train_sizes, train_scores, test_scores = sklearn.learning_curve.learning_curve(classifier, training_x,
@@ -36,7 +36,7 @@ def learning_curve(training_x, training_y, filename, classifier):
     print "{:.2f}% accuracy on test +/- {:.2f}".format(100. * test_means[-1], 100. * test_std[-1])
 
     plt.figure()
-    plt.title("Random Forest Classifier")
+    plt.title(classifier_name)
     plt.xlabel("Training size")
     plt.ylabel("Accuracy")
     plt.ylim((0, 1.01))
@@ -86,6 +86,7 @@ def parse_args():
     parser.add_argument("--logistic", default=False, action="store_true", help="Experiments with logistic regression")
     parser.add_argument("--xg", default=False, action="store_true", help="Experiments with gradient boosting trees")
     parser.add_argument("--elastic", default=False, action="store_true", help="Experiments with elastic nets")
+    parser.add_argument("--learning-curve", default=None, help="Generate a learning curve and save to file")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -117,6 +118,11 @@ def print_logistic_regression_feature_importances(column_names, classifier):
 
 def logistic_regression(X, y, data, split_iterator, pca=False):
     logistic = sklearn.linear_model.LogisticRegression()
+
+    # fast grid search
+    # logistic_search = sklearn.linear_model.LogisticRegressionCV()
+
+    # old grid search
     hyperparameter_space = {
         "C": [0.1, 0.5, 1., 2, 4],
         "penalty": ["l2"]
@@ -211,9 +217,9 @@ def preprocess_features(data):
 
     data = data.drop(["GameVersion"], axis=1)
 
-    for col in [c for c in data.columns if "Damage" in c]:
-        #data[col] = pandas.qcut(data[col], 5)
-        data[col + "_qcut5"] = pandas.qcut(data[col], 5)
+    # for col in [c for c in data.columns if "Damage" in c]:
+    #     #data[col] = pandas.qcut(data[col], 5)
+    #     data[col + "_qcut5"] = pandas.qcut(data[col], 5)
 
     data = data.drop([c for c in data.columns if "Champ" in c], axis=1)
     # convert the per-role champions into boolean indicators per side
@@ -224,13 +230,15 @@ def preprocess_features(data):
     #     merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
     #     data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
 
+    data = data.drop([c for c in data.columns if "Spell" in c], axis=1)
+
     # convert the per-role summoner spells into sums per side
     # e.g., Blue_1_Spell_1, (0-1) Blue_2_Spell_2 (0-1), ... get merged into Blue_Flash (0-5)
-    for team in ["Blue", "Red"]:
-        cols = [col for col in data.columns if team in col and "Spell" in col]
-        indicator_dfs = [pandas.get_dummies(data[col], prefix="{}_Summoners".format(team)) for col in cols]
-        merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
-        data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
+    # for team in ["Blue", "Red"]:
+    #     cols = [col for col in data.columns if team in col and "Spell" in col]
+    #     indicator_dfs = [pandas.get_dummies(data[col], prefix="{}_Summoners".format(team)) for col in cols]
+    #     merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
+    #     data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
 
     # merge win rates and such across the team
     for team in ["Blue", "Red"]:
@@ -262,7 +270,7 @@ def preprocess_features(data):
     data = pandas.get_dummies(data)
 
     # speeds up learning a little
-    data = data.drop("Blue_Summoners_Unknown Red_Summoners_Unknown".split(), axis=1)
+    data = data.drop([c for c in data.columns if is_dropped_column(c)], axis=1)
 
     print "After preprocessing"
     data.info()
@@ -270,6 +278,9 @@ def preprocess_features(data):
     print "Columns: " + ", ".join(sorted(data.columns))
 
     return data
+
+def is_dropped_column(column_name):
+    return "_TotalWinRate_Min" in column_name or "_Played_Min" in column_name or "_TotalPlayed_Min" in column_name
 
 
 def check_data(X, y):
@@ -290,6 +301,9 @@ def main():
     check_data(X, y)
 
     cross_val_splits = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
+
+    if args.learning_curve:
+        learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
 
     if args.forest:
         random_forest(X, y, data, cross_val_splits)
