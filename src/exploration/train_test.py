@@ -186,7 +186,7 @@ def elastic_net(X, y, split_iterator):
 def gradient_boosting_exp(X, y, data, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
-        # "learning_rate": [0.2, 0.5, 0.75, 1.],
+        "learning_rate": [0.2, 0.5, 0.75, 1.],
         "min_samples_leaf": [20],
         # "subsample": [0.8, 0.9, 1.]
     }
