@@ -87,6 +87,7 @@ def parse_args():
     parser.add_argument("--xg", default=False, action="store_true", help="Experiments with gradient boosting trees")
     parser.add_argument("--elastic", default=False, action="store_true", help="Experiments with elastic nets")
     parser.add_argument("--learning-curve", default=None, help="Generate a learning curve and save to file")
+    parser.add_argument("--decision-tree", default=False, action="store_true", help="Experiments with decision trees")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -105,6 +106,16 @@ def random_forest(X, y, data, split_iterator):
     print "Random forest"
     print_tuning_scores(grid_search)
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search)
+
+def decision_tree(X, y, data, split_iterator):
+    tree = sklearn.tree.DecisionTreeClassifier()
+
+    scores = sklearn.cross_validation.cross_val_score(tree, X, y, cv=split_iterator)
+
+    print "Decision tree: {:.2f}% +/- {:.2f}%".format(100. * scores.mean(), 100. * scores.std())
+
+    tree.fit(X, y)
+    sklearn.tree.export_graphviz(tree, "decision_tree.dot", feature_names=data.drop("IsBlueWinner", axis=1).columns)
 
 
 def print_logistic_regression_feature_importances(column_names, classifier):
@@ -172,11 +183,11 @@ def elastic_net(X, y, split_iterator):
 
 
 
-def gradient_boosting_exp(X, y, split_iterator):
+def gradient_boosting_exp(X, y, data, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
-        "learning_rate": [0.2, 0.5],
-        "min_samples_leaf": [1, 10, 20],
+        # "learning_rate": [0.2, 0.5, 0.75, 1.],
+        "min_samples_leaf": [20],
         # "subsample": [0.8, 0.9, 1.]
     }
 
@@ -186,6 +197,7 @@ def gradient_boosting_exp(X, y, split_iterator):
 
     print "Gradient boosting classifier"
     print_tuning_scores(grid_search)
+    print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search)
 
 
 def dataframe_to_ndarrays(data):
@@ -215,12 +227,17 @@ def merge_roles(data, team, suffix, include_log_sum=False, include_sum=True, inc
     return data.drop(cols, axis=1)
 
 
+def make_diff_feature(data, feature_suffix):
+    data["Delta" + feature_suffix] = data["Blue" + feature_suffix] - data["Red" + feature_suffix]
+    return data.drop(["Blue" + feature_suffix, "Red" + feature_suffix], axis=1)
+
+
 def preprocess_features(data):
     print "Before preprocessing"
     data.info()
     print "Columns: " + ", ".join(sorted(data.columns))
 
-    data = data.drop(["GameVersion"], axis=1)
+    data = data.drop(["MatchId", "GameVersion"], axis=1)
 
     # for col in [c for c in data.columns if "Damage" in c]:
     #     #data[col] = pandas.qcut(data[col], 5)
@@ -247,30 +264,36 @@ def preprocess_features(data):
 
     # merge win rates and such across the team
     for team in ["Blue", "Red"]:
-        data = merge_roles(data, team, "_Played", include_log_sum=True, include_sum=False, include_min=False)
-        data = merge_roles(data, team, "_TotalPlayed", include_log_sum=True, include_sum=False, include_min=False)
+        # player-specific games played
+        data = merge_roles(data, team, "_NumGames(player champion season)", include_log_sum=True, include_sum=False, include_min=False)
+        data = merge_roles(data, team, "_NumGames(player season)", include_log_sum=True, include_sum=False, include_min=False)
 
-        data = merge_roles(data, team, "_GeneralPlayRate")
-        data = merge_roles(data, team, "_WinRate")
-        data = merge_roles(data, team, "_TotalWinRate")
-        data = merge_roles(data, team, "_GeneralWinRate")
-        data = merge_roles(data, team, "_MatchHistWinRate")
-        data = merge_roles(data, team, "_MatchHistPatchWinRate")
+        # played-specific win rates
+        data = merge_roles(data, team, "_WinRate(player champion season)")
+        data = merge_roles(data, team, "_WinRate(player season)")
 
-        data[team + "_Combined_WR_LP"] = data[team + "_WinRate_Sum"] * data[team + "_Played_LogSum"]
-        data[team + "_Combined_MHPWR_LogP"] = data[team + "_MatchHistPatchWinRate_Sum"] * data[team + "_TotalPlayed_LogSum"]
+        # win rates and play rates from the general population
+        data = merge_roles(data, team, "_WinRate(champion season)")
+        data = merge_roles(data, team, "_PlayRate(champion season)")
+        data = merge_roles(data, team, "_WinRate(champion recent)")
+        data = merge_roles(data, team, "_WinRate(champion version recent)")
+
+        data[team + "_Combined_WinRateSum_PlayedLogSum(player champion season)"] = data[team + "_WinRate(player champion season)_Sum"] * data[team + "_NumGames(player champion season)_LogSum"]
+        data[team + "_Combined_WinRateSum_PlayedLogSum(cvr ps)"] = data[team + "_WinRate(champion version recent)_Sum"] * data[team + "_NumGames(player season)_LogSum"]
 
     # a few diff features
-    for feature_suffix in ["_MatchHistPatchWinRate", "_MatchHistWinRate", "_GeneralWinRate", "_TotalWinRate", "_GeneralPlayRate"]:
+    for feature_suffix in ["_WinRate(champion version recent)", "_WinRate(champion recent)", "_WinRate(champion season)", "_WinRate(player season)", "_PlayRate(champion season)"]:
         data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
         data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
+        
+        # data["Delta" + feature_suffix + "_Max"] = data["Blue" + feature_suffix + "_Max"] - data["Red" + feature_suffix + "_Max"]
+        # data = data.drop(["Blue" + feature_suffix + "_Max", "Red" + feature_suffix + "_Max"], axis=1)
 
-    data["Delta_Combined_WR_LP"] = data["Blue_Combined_WR_LP"] - data["Red_Combined_WR_LP"]
-    data = data.drop(["Blue_Combined_WR_LP", "Red_Combined_WR_LP"], axis=1)
 
-    data["Delta_Combined_MHPWR_LogP"] = data["Blue_Combined_MHPWR_LogP"] - data["Red_Combined_MHPWR_LogP"]
-    data = data.drop(["Blue_Combined_MHPWR_LogP", "Red_Combined_MHPWR_LogP"], axis=1)
+    data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player champion season)")
+    data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(cvr ps)")
 
+    # data = data.drop([c for c in data.columns if "recent" in c], axis=1)
 
     data = pandas.get_dummies(data)
 
@@ -278,6 +301,10 @@ def preprocess_features(data):
     data.info()
     print data.describe()
     print "Columns: " + ", ".join(sorted(data.columns))
+
+    print "Example data"
+    for name, value in zip(data.columns, data.values[0,:]):
+        print "{}: {}".format(name, value)
 
     return data
 
@@ -301,11 +328,15 @@ def main():
 
     cross_val_splits = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
 
+    if args.decision_tree:
+        decision_tree(X, y, data, cross_val_splits)
+
     if args.learning_curve:
         learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
 
     if args.forest:
         random_forest(X, y, data, cross_val_splits)
+
 
     if args.logistic:
         logistic_regression(X, y, data, cross_val_splits)
@@ -314,7 +345,7 @@ def main():
         elastic_net(X, y, cross_val_splits)
 
     if args.xg:
-        gradient_boosting_exp(X, y, cross_val_splits)
+        gradient_boosting_exp(X, y, data, cross_val_splits)
 
 
 if __name__ == "__main__":

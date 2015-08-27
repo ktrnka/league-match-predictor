@@ -50,8 +50,8 @@ class Summoner:
         return "{}__{}".format(self.name, self.id)
 
     @staticmethod
-    def from_fields(id, name):
-        return Summoner({"id": id, "name": name})
+    def from_fields(summoner_id, name):
+        return Summoner({"id": summoner_id, "name": name})
 
 
 class Participant(object):
@@ -339,7 +339,7 @@ class ChampionStats(object):
             return 0
 
         if remove_stats:
-            assert isinstance (remove_stats, ChampionStats)
+            assert isinstance(remove_stats, ChampionStats)
             remove_games += remove_stats.played
 
         # if any stat is inconsistent then the game(s) being removed can be ignored

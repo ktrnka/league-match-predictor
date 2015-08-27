@@ -51,19 +51,19 @@ def main():
     for team in ["Blue", "Red"]:
         for player in range(1, 6):
             player_features.append("{}_{}_Champ".format(team, player))
-            player_features.append("{}_{}_WinRate".format(team, player))
-            player_features.append("{}_{}_Played".format(team, player))
-            player_features.append("{}_{}_GeneralPlayRate".format(team, player))
-            player_features.append("{}_{}_GeneralWinRate".format(team, player))
-            player_features.append("{}_{}_TotalWinRate".format(team, player))
-            player_features.append("{}_{}_TotalPlayed".format(team, player))
-            player_features.append("{}_{}_MatchHistWinRate".format(team, player))
-            player_features.append("{}_{}_MatchHistPatchWinRate".format(team, player))
+            player_features.append("{}_{}_WinRate(player champion season)".format(team, player))
+            player_features.append("{}_{}_NumGames(player champion season)".format(team, player))
+            player_features.append("{}_{}_PlayRate(champion season)".format(team, player))
+            player_features.append("{}_{}_WinRate(champion season)".format(team, player))
+            player_features.append("{}_{}_WinRate(player season)".format(team, player))
+            player_features.append("{}_{}_NumGames(player season)".format(team, player))
+            player_features.append("{}_{}_WinRate(champion recent)".format(team, player))
+            player_features.append("{}_{}_WinRate(champion version recent)".format(team, player))
             for summoner_spell_id in [1, 2]:
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
-            player_features.append("{}_Damage_{}".format(team, damage_type))
-    columns = ["QueueType", "GameVersion", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
+            player_features.append("{}_DamagePercent({})".format(team, damage_type))
+    columns = ["MatchId", "QueueType", "GameVersion", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
@@ -101,35 +101,37 @@ def main():
 
                     damage_types.update(riot_cache.get_champion_damage_types(player.champion_id))
 
-                    remove_match = 0
-                    remove_win = 0
-                    if player_stats.modify_date > match.creation_time:
-                        remove_match = 1
-                        remove_win = 1 if winner == team else 0
+                    remove_match_player_stats = 0
+                    remove_win_player_stats = 0
+                    if player_stats.modify_date > match.creation_time and match.full_data["season"] == "SEASON2015":
+                        remove_match_player_stats = 1
+                        remove_win_player_stats = int(winner == team)
 
                     champion_stats = player_stats.get_champion_stats(player.champion_id)
 
                     # win rate on this champion
-                    player_features.append(champion_stats.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
-                    player_features.append(champion_stats.get_played(remove_games=remove_match))
+                    player_features.append(champion_stats.get_win_rate(remove_games=remove_match_player_stats, remove_wins=remove_win_player_stats))
+                    player_features.append(champion_stats.get_played(remove_games=remove_match_player_stats))
 
                     # play rate in general and win rate in general for all players
                     player_features.append(agg_champion_stats[player.champion_id].played / float(agg_stats.played))
                     player_features.append(agg_champion_stats[player.champion_id].won / float(agg_champion_stats[player.champion_id].played))
 
                     # win rate overall
-                    player_features.append(player_stats.totals.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
-                    player_features.append(player_stats.totals.get_played(remove_games=remove_match))
+                    player_features.append(player_stats.totals.get_win_rate(remove_games=remove_match_player_stats, remove_wins=remove_win_player_stats))
+                    player_features.append(player_stats.totals.get_played(remove_games=remove_match_player_stats))
+
+                    remove_match_match_history = 1
+                    remove_win_match_history = int(winner == team)
 
                     # win rate from match histories
-                    player_features.append(champion_stats_match_history[player.champion_id].get_win_rate(remove_games=remove_match, remove_wins=remove_win))
+                    player_features.append(champion_stats_match_history[player.champion_id].get_win_rate(remove_games=remove_match_match_history, remove_wins=remove_win_match_history))
 
                     # win rate from match histories on this patch
                     patch_champ_stats = champion_stats_match_history.get((match.version, player.champion_id), None)
-                    if not patch_champ_stats or patch_champ_stats.get_played(remove_games=remove_match) == 0:
+                    if not patch_champ_stats or patch_champ_stats.get_played(remove_games=remove_match_match_history) < 20:
                         patch_champ_stats = champion_stats_match_history[player.champion_id]
-                    player_features.append(patch_champ_stats.get_win_rate(remove_games=remove_match, remove_wins=remove_win))
-
+                    player_features.append(patch_champ_stats.get_win_rate(remove_games=remove_match_match_history, remove_wins=remove_win_match_history))
 
                     for summoner_spell_id in player.spells:
                         player_features.append(riot_connection.get_summoner_spell_name(summoner_spell_id))
@@ -140,7 +142,7 @@ def main():
 
             is_blue_winner = int(winner == teams[0])
 
-            row = [match.queue_type, match.version] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
+            row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
             csv_out.write(",".join(str(x) for x in row) + "\n")
 
     logger.info("Pulling and converting data took %.1f sec", time.time() - previous_time)
