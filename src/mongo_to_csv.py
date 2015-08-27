@@ -106,6 +106,7 @@ def main():
                     if player_stats.modify_date > match.creation_time and match.full_data["season"] == "SEASON2015":
                         remove_match_player_stats = 1
                         remove_win_player_stats = int(winner == team)
+                    assert team == player.team_id
 
                     champion_stats = player_stats.get_champion_stats(player.champion_id)
 
@@ -121,8 +122,10 @@ def main():
                     player_features.append(player_stats.totals.get_win_rate(remove_games=remove_match_player_stats, remove_wins=remove_win_player_stats))
                     player_features.append(player_stats.totals.get_played(remove_games=remove_match_player_stats))
 
-                    remove_match_match_history = 1
-                    remove_win_match_history = int(winner == team)
+                    # remove_match_match_history = 1
+                    # remove_win_match_history = int(winner == team)
+                    remove_match_match_history = 0
+                    remove_win_match_history = 0
 
                     # win rate from match histories
                     player_features.append(champion_stats_match_history[player.champion_id].get_win_rate(remove_games=remove_match_match_history, remove_wins=remove_win_match_history))
