@@ -5,7 +5,7 @@ import logging
 import sys
 import argparse
 import time
-import scrape_featured
+import scrape_riot_api
 import riot_api
 import riot_api_cache
 import riot_data
@@ -109,7 +109,7 @@ def explore_champions(riot_cache, riot_connection):
 
 
 def main():
-    args = scrape_featured.parse_args()
+    args = scrape_riot_api.parse_args()
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)

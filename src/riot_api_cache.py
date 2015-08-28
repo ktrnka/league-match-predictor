@@ -53,11 +53,16 @@ class ApiCache(object):
     def __init__(self, config):
         self.outcomes = collections.Counter()
         self.champion_damages = collections.defaultdict(collections.Counter)
-        self.mongo_client = pymongo.MongoClient(config.get("mongo", "uri"))
-        self.mongo_db = self.mongo_client.get_default_database()
 
-        self.players = self.mongo_db[PLAYER_COLLECTION]
-        self.matches = self.mongo_db[MATCH_COLLECTION]
+        # matches
+        self.__matches_mongo_client = pymongo.MongoClient(config.get("mongo", "match_uri"))
+        self.__matches_mongo_db = self.__matches_mongo_client.get_default_database()
+        self.matches = self.__matches_mongo_db[MATCH_COLLECTION]
+
+        # summoners
+        self.__summoners_mongo_client = pymongo.MongoClient(config.get("mongo", "summoner_uri"))
+        self.__summoners_mongo_db = self.__summoners_mongo_client.get_default_database()
+        self.players = self.__summoners_mongo_db[PLAYER_COLLECTION]
 
         self.logger = logging.getLogger(__name__)
 

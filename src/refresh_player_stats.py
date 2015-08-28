@@ -47,12 +47,12 @@ def main():
             except riot_api.SummonerNotFoundError:
                 success["update ranked failure"] += 1
 
-            try:
-                player_stats = riot_connection.get_summoner_summary_stats(player_id)
-                riot_cache.update_player_summary_stats(player_id, player_stats)
-                success["update summary success"] += 1
-            except riot_api.SummonerNotFoundError:
-                success["update summary failure"] += 1
+            # try:
+            #     player_stats = riot_connection.get_summoner_summary_stats(player_id)
+            #     riot_cache.update_player_summary_stats(player_id, player_stats)
+            #     success["update summary success"] += 1
+            # except riot_api.SummonerNotFoundError:
+            #     success["update summary failure"] += 1
 
         print "Player update outcomes: {}".format(success.most_common())
 

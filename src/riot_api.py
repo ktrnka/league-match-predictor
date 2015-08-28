@@ -52,8 +52,10 @@ class RiotService(object):
 
     @staticmethod
     def from_config(config_parser):
-        return RiotService(config_parser.get("riot", "base"), config_parser.get("riot", "static_base"),
-                           config_parser.get("riot", "observer_base"), config_parser.get("riot", "api_key"))
+        return RiotService(config_parser.get("riot", "base"),
+                           config_parser.get("riot", "static_base"),
+                           config_parser.get("riot", "observer_base"),
+                           config_parser.get("riot", "api_key"))
 
     def request(self, endpoint, base_url=None, tries_left=1, additional_params=None, suppress_codes={}):
         params = _merge_params(self.params, additional_params)
