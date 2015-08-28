@@ -31,7 +31,7 @@ def _merge_params(params, additional_params):
 
 
 class RiotService(object):
-    def __init__(self, base_url, static_base_url, observer_base_url, api_key):
+    def __init__(self, base_url, static_base_url, observer_base_url, api_key, delay_seconds=1.2):
         self.base_url = base_url
         self.static_base_url = static_base_url
         self.observer_base_url = observer_base_url
@@ -40,7 +40,7 @@ class RiotService(object):
         self.champions = None
 
         self.most_recent_request = None
-        self.delay_seconds = 1.4
+        self.delay_seconds = delay_seconds * 1.1
         self.logger = logging.getLogger("RiotService")
         self.heartbeat_logger = logging.getLogger("RiotService.heartbeat")
         self.heartbeat_logger.addFilter(utilities.ThrottledFilter())
@@ -55,7 +55,8 @@ class RiotService(object):
         return RiotService(config_parser.get("riot", "base"),
                            config_parser.get("riot", "static_base"),
                            config_parser.get("riot", "observer_base"),
-                           config_parser.get("riot", "api_key"))
+                           config_parser.get("riot", "api_key"),
+                           config_parser.get("riot", "api_delay_seconds"))
 
     def request(self, endpoint, base_url=None, tries_left=1, additional_params=None, suppress_codes={}):
         params = _merge_params(self.params, additional_params)
@@ -73,7 +74,7 @@ class RiotService(object):
             return self.request(endpoint, base_url, tries_left=tries_left - 1, additional_params=additional_params)
 
         # increase the delay exponentially for rate limit errors
-        for exponential_level in xrange(1, 4):
+        for exponential_level in xrange(1, 5):
             if response.status_code != RATE_LIMIT_ERROR:
                 break
 

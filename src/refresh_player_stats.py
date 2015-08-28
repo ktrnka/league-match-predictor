@@ -39,7 +39,6 @@ def main():
     try:
         success = collections.Counter()
         for player_id in riot_cache.get_player_ids():
-
             try:
                 player_stats = riot_connection.get_summoner_ranked_stats(player_id)
                 riot_cache.update_player_stats(player_id, player_stats)
