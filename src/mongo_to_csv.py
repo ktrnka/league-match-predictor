@@ -28,6 +28,30 @@ def make_champion_indicator_names(riot_connection):
     return [riot_connection.get_champion_info(champion_id)["name"] for champion_id in riot_data.Champion.known_ids]
 
 
+def update_stats(match_history_stats, match):
+    """Update our running tally of stats from the match history"""
+    for player in match.players:
+        for conditional_key in [player.champion_id, (match.version, player.champion_id)]:
+            if conditional_key not in match_history_stats:
+                match_history_stats[conditional_key] = riot_data.ChampionStats.from_wins_played(0, 0)
+            if player.team_id == match.get_winning_team_id():
+                match_history_stats[conditional_key].won += 1
+            match_history_stats[conditional_key].played += 1
+
+def smooth_winrate(primary_champion_stats, secondary_champion_stats, crossover=20, remove_games=0, remove_wins=0):
+    if not primary_champion_stats:
+        if secondary_champion_stats:
+            return secondary_champion_stats.get_win_rate(remove_games=remove_games, remove_wins=remove_wins)
+        else:
+            return 0.5
+
+    assert isinstance(primary_champion_stats, riot_data.ChampionStats)
+    assert isinstance(secondary_champion_stats, riot_data.ChampionStats)
+
+    primary_weight = primary_champion_stats.get_played(remove_games=remove_games) / float(primary_champion_stats.get_played(remove_games=remove_games) + crossover)
+
+    return primary_champion_stats.get_win_rate(remove_games=remove_games, remove_wins=remove_wins) * primary_weight + secondary_champion_stats.get_win_rate(remove_games=remove_games, remove_wins=remove_wins) * (1 - primary_weight)
+
 def main():
     args = parse_args()
 
@@ -72,15 +96,20 @@ def main():
 
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
-    champion_stats_match_history = riot_cache.aggregate_match_stats()
+    # champion_stats_match_history = riot_cache.aggregate_match_stats()
 
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
+
+    match_history_stats = dict()
 
     previous_time = time.time()
     with io.open(args.output_csv, "w") as csv_out:
         csv_out.write(",".join(columns) + "\n")
 
-        for match in riot_cache.get_matches():
+        previous_creation_time = 0
+
+        for match_num, match in enumerate(riot_cache.get_matches(chronological=True)):
+            assert previous_creation_time <= match.creation_time
             winner = match.get_winning_team_id()
 
             picks = match.get_picks_role()
@@ -111,7 +140,8 @@ def main():
                     champion_stats = player_stats.get_champion_stats(player.champion_id)
 
                     # win rate on this champion
-                    player_features.append(champion_stats.get_win_rate(remove_games=remove_match_player_stats, remove_wins=remove_win_player_stats))
+                    player_champ_winrate = smooth_winrate(champion_stats, agg_champion_stats[player.champion_id], crossover=10, remove_games=remove_match_player_stats, remove_wins=remove_win_player_stats)
+                    player_features.append(player_champ_winrate)
                     player_features.append(champion_stats.get_played(remove_games=remove_match_player_stats))
 
                     # play rate in general and win rate in general for all players
@@ -122,19 +152,21 @@ def main():
                     player_features.append(player_stats.totals.get_win_rate(remove_games=remove_match_player_stats, remove_wins=remove_win_player_stats))
                     player_features.append(player_stats.totals.get_played(remove_games=remove_match_player_stats))
 
-                    # remove_match_match_history = 1
-                    # remove_win_match_history = int(winner == team)
-                    remove_match_match_history = 0
-                    remove_win_match_history = 0
+                    # note that the games are processed chronologically so we don't need to remove the current game from the historical
+                    # win rates
 
                     # win rate from match histories
-                    player_features.append(champion_stats_match_history[player.champion_id].get_win_rate(remove_games=remove_match_match_history, remove_wins=remove_win_match_history))
+                    try:
+                        player_features.append(match_history_stats[player.champion_id].get_win_rate())
+                    except KeyError:
+                        player_features.append(0.5)
 
                     # win rate from match histories on this patch
-                    patch_champ_stats = champion_stats_match_history.get((match.version, player.champion_id), None)
-                    if not patch_champ_stats or patch_champ_stats.get_played(remove_games=remove_match_match_history) < 20:
-                        patch_champ_stats = champion_stats_match_history[player.champion_id]
-                    player_features.append(patch_champ_stats.get_win_rate(remove_games=remove_match_match_history, remove_wins=remove_win_match_history))
+                    patch_champ_stats_mh = match_history_stats.get((match.version, player.champion_id), None)
+                    champ_stats_mh = match_history_stats.get(player.champion_id, None)
+
+                    champion_version_winrate = smooth_winrate(patch_champ_stats_mh, champ_stats_mh, crossover=10)
+                    player_features.append(champion_version_winrate)
 
                     for summoner_spell_id in player.spells:
                         player_features.append(riot_connection.get_summoner_spell_name(summoner_spell_id))
@@ -146,7 +178,13 @@ def main():
             is_blue_winner = int(winner == teams[0])
 
             row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
-            csv_out.write(",".join(str(x) for x in row) + "\n")
+
+            # history columns are completely inaccurate until this point
+            if match_num > 2000:
+                csv_out.write(",".join(str(x) for x in row) + "\n")
+
+            previous_creation_time = match.creation_time
+            update_stats(match_history_stats, match)
 
     logger.info("Pulling and converting data took %.1f sec", time.time() - previous_time)
 

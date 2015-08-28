@@ -186,7 +186,7 @@ def elastic_net(X, y, split_iterator):
 def gradient_boosting_exp(X, y, data, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
-        "learning_rate": [0.2, 0.5, 0.75, 1.],
+        "learning_rate": [0.75, 0.9, 1.],
         "min_samples_leaf": [20],
         # "subsample": [0.8, 0.9, 1.]
     }
@@ -232,7 +232,7 @@ def make_diff_feature(data, feature_suffix):
     return data.drop(["Blue" + feature_suffix, "Red" + feature_suffix], axis=1)
 
 
-def preprocess_features(data):
+def preprocess_features(data, show_example=False):
     print "Before preprocessing"
     data.info()
     print "Columns: " + ", ".join(sorted(data.columns))
@@ -293,7 +293,7 @@ def preprocess_features(data):
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player champion season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(cvr ps)")
 
-    # data = data.drop([c for c in data.columns if "recent" in c], axis=1)
+    # data = data.drop([c for c in data.columns if "recent" in c or "cvr" in c], axis=1)
 
     data = pandas.get_dummies(data)
 
@@ -302,9 +302,10 @@ def preprocess_features(data):
     print data.describe()
     print "Columns: " + ", ".join(sorted(data.columns))
 
-    print "Example data"
-    for name, value in zip(data.columns, data.values[0,:]):
-        print "{}: {}".format(name, value)
+    if show_example:
+        print "Example data"
+        for name, value in zip(data.columns, data.values[0,:]):
+            print "{}: {}".format(name, value)
 
     return data
 

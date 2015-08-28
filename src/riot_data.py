@@ -153,6 +153,15 @@ class Match(object):
 
         return picks
 
+    def get_bans(self):
+        """Get a set of bans"""
+        bans = set()
+        for team in self.full_data["teams"].itervalues():
+            for ban in team["bans"]:
+                bans.add(ban["championId"])
+
+        return bans
+
     def get_team_tiers_numeric(self):
         team_tiers = collections.defaultdict(set)
         for player in self.full_data["participants"]:

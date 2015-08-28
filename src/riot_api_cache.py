@@ -264,8 +264,11 @@ class ApiCache(object):
         result = self.matches.update(Envelope.query_queued(False), {"$unset": make_unset()}, multi=True)
         self.logger.info("Result from pruning detail fields: %s", result)
 
-    def get_matches(self):
-        for match_data in self.matches.find(Envelope.query_queued(False)):
+    def get_matches(self, chronological=False):
+        c = self.matches.find(Envelope.query_queued(False))
+        if chronological:
+            c = c.sort("data.matchCreation", pymongo.ASCENDING)
+        for match_data in c:
             yield riot_data.Match(match_data["data"])
 
     def precompute_champion_damage(self):
