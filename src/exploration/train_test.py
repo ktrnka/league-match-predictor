@@ -227,9 +227,13 @@ def merge_roles(data, team, suffix, include_log_sum=False, include_sum=True, inc
     return data.drop(cols, axis=1)
 
 
-def make_diff_feature(data, feature_suffix):
+def make_diff_feature(data, feature_suffix, remove_original=True):
     data["Delta" + feature_suffix] = data["Blue" + feature_suffix] - data["Red" + feature_suffix]
-    return data.drop(["Blue" + feature_suffix, "Red" + feature_suffix], axis=1)
+
+    if remove_original:
+        return data.drop(["Blue" + feature_suffix, "Red" + feature_suffix], axis=1)
+    else:
+        return data
 
 
 def preprocess_features(data, show_example=False):
@@ -262,6 +266,9 @@ def preprocess_features(data, show_example=False):
     #     merged = reduce(lambda a, b: a.combineAdd(b), indicator_dfs[1:], indicator_dfs[0])
     #     data = pandas.concat((data.drop(cols, axis=1), merged), axis=1)
 
+    # drop the streak features because they lead to severe overfitting
+    data = data.drop([c for c in data.columns if "Streak" in c], axis=1)
+
     # merge win rates and such across the team
     for team in ["Blue", "Red"]:
         # player-specific games played
@@ -285,15 +292,10 @@ def preprocess_features(data, show_example=False):
     for feature_suffix in ["_WinRate(champion version recent)", "_WinRate(champion recent)", "_WinRate(champion season)", "_WinRate(player season)", "_PlayRate(champion season)"]:
         data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
         data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
-        
-        # data["Delta" + feature_suffix + "_Max"] = data["Blue" + feature_suffix + "_Max"] - data["Red" + feature_suffix + "_Max"]
-        # data = data.drop(["Blue" + feature_suffix + "_Max", "Red" + feature_suffix + "_Max"], axis=1)
 
 
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player champion season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(cvr ps)")
-
-    # data = data.drop([c for c in data.columns if "recent" in c or "cvr" in c], axis=1)
 
     data = pandas.get_dummies(data)
 

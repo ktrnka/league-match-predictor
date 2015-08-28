@@ -74,6 +74,11 @@ class Participant(object):
     def from_joined(data):
         return Participant(data["teamId"], [data["spell1Id"], data["spell2Id"]], data["championId"], data["summonerName"])
 
+    def get_champion_spells_key(self):
+        """Tuple of champion ID and the two summoner spells in numeric order"""
+        spells = sorted(self.spells)
+        return self.champion_id, spells[0], spells[1]
+
     @staticmethod
     def parse_participants(participants, participant_identities):
         if participant_identities:
@@ -224,9 +229,16 @@ class PlayerStats(object):
         self.champion_stats = {record["id"]: record["stats"] for record in data["champions"]}
         self.totals = _merge_stats(self.champion_stats.itervalues())
 
+        self.winning_streak_games = 0
+        self.losing_streak_games = 0
+
     @staticmethod
     def make_blank():
         return PlayerStats({"summonerId": -1, "modifyDate": 0, "champions": []})
+
+    @staticmethod
+    def from_id(summoner_id):
+        return PlayerStats({"summonerId": summoner_id, "modifyDate": 0, "champions": []})
 
     def get_champion(self, champion_id):
         return self.champion_stats[champion_id]

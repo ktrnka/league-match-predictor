@@ -27,16 +27,16 @@ def champion_set_to_indicators(champion_ids):
 def make_champion_indicator_names(riot_connection):
     return [riot_connection.get_champion_info(champion_id)["name"] for champion_id in riot_data.Champion.known_ids]
 
-
 def update_stats(match_history_stats, match):
     """Update our running tally of stats from the match history"""
     for player in match.players:
-        for conditional_key in [player.champion_id, (match.version, player.champion_id)]:
+        for conditional_key in [player.champion_id, (match.version, player.champion_id), player.get_champion_spells_key()]:
             if conditional_key not in match_history_stats:
                 match_history_stats[conditional_key] = riot_data.ChampionStats.from_wins_played(0, 0)
             if player.team_id == match.get_winning_team_id():
                 match_history_stats[conditional_key].won += 1
             match_history_stats[conditional_key].played += 1
+
 
 def smooth_winrate(primary_champion_stats, secondary_champion_stats, crossover=20, remove_games=0, remove_wins=0):
     if not primary_champion_stats:
@@ -51,6 +51,29 @@ def smooth_winrate(primary_champion_stats, secondary_champion_stats, crossover=2
     primary_weight = primary_champion_stats.get_played(remove_games=remove_games) / float(primary_champion_stats.get_played(remove_games=remove_games) + crossover)
 
     return primary_champion_stats.get_win_rate(remove_games=remove_games, remove_wins=remove_wins) * primary_weight + secondary_champion_stats.get_win_rate(remove_games=remove_games, remove_wins=remove_wins) * (1 - primary_weight)
+
+
+def update_player_history(player_history_stats, match, player):
+    assert isinstance(match, riot_data.Match)
+    assert isinstance(player, riot_data.Participant)
+
+    if player.id not in player_history_stats:
+        player_history_stats[player.id] = riot_data.PlayerStats.from_id(player.id)
+
+    if player.team_id == match.get_winning_team_id():
+        player_history_stats[player.id].losing_streak_games = 0
+        player_history_stats[player.id].winning_streak_games += 1
+    else:
+        player_history_stats[player.id].losing_streak_games += 1
+        player_history_stats[player.id].winning_streak_games = 0
+
+
+def get_player_streaks(player_histories, player_id):
+    if player_id in player_histories:
+        return player_histories[player_id].winning_streak_games, player_histories[player_id].losing_streak_games
+    else:
+        return 0, 0
+
 
 def main():
     args = parse_args()
@@ -83,6 +106,9 @@ def main():
             player_features.append("{}_{}_NumGames(player season)".format(team, player))
             player_features.append("{}_{}_WinRate(champion recent)".format(team, player))
             player_features.append("{}_{}_WinRate(champion version recent)".format(team, player))
+            player_features.append("{}_{}_WinRate(champion summoners recent)".format(team, player))
+            player_features.append("{}_{}_WinningStreak(player)".format(team, player))
+            player_features.append("{}_{}_LosingStreak(player)".format(team, player))
             for summoner_spell_id in [1, 2]:
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
@@ -101,6 +127,7 @@ def main():
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
 
     match_history_stats = dict()
+    player_history_stats = dict()
 
     previous_time = time.time()
     with io.open(args.output_csv, "w") as csv_out:
@@ -164,12 +191,22 @@ def main():
                     # win rate from match histories on this patch
                     patch_champ_stats_mh = match_history_stats.get((match.version, player.champion_id), None)
                     champ_stats_mh = match_history_stats.get(player.champion_id, None)
-
                     champion_version_winrate = smooth_winrate(patch_champ_stats_mh, champ_stats_mh, crossover=10)
                     player_features.append(champion_version_winrate)
 
+                    # win rate of the champion with the specific summoners from match history with backoff
+                    champion_spells_winrate = match_history_stats.get(player.get_champion_spells_key(), None)
+                    champion_spells_smoothed = smooth_winrate(champion_spells_winrate, champ_stats_mh, crossover=10)
+                    player_features.append(champion_spells_smoothed)
+
+                    winning_streak, losing_streak = get_player_streaks(player_history_stats, player.id)
+                    player_features.append(winning_streak)
+                    player_features.append(losing_streak)
+
                     for summoner_spell_id in player.spells:
                         player_features.append(riot_connection.get_summoner_spell_name(summoner_spell_id))
+
+                    update_player_history(player_history_stats, match, player)
 
                 damage_sum = float(sum(damage_types.itervalues()))
                 for damage_type in ["magic", "physical", "true"]:

@@ -56,7 +56,7 @@ class RiotService(object):
                            config_parser.get("riot", "static_base"),
                            config_parser.get("riot", "observer_base"),
                            config_parser.get("riot", "api_key"),
-                           config_parser.get("riot", "api_delay_seconds"))
+                           float(config_parser.get("riot", "api_delay_seconds")))
 
     def request(self, endpoint, base_url=None, tries_left=1, additional_params=None, suppress_codes={}):
         params = _merge_params(self.params, additional_params)
