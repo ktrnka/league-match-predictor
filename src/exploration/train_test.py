@@ -275,7 +275,7 @@ def preprocess_features(data, show_example=False):
         data = merge_roles(data, team, "_NumGames(player champion season)", include_log_sum=True, include_sum=False, include_min=False)
         data = merge_roles(data, team, "_NumGames(player season)", include_log_sum=True, include_sum=False, include_min=False)
 
-        # played-specific win rates
+        # player-specific win rates
         data = merge_roles(data, team, "_WinRate(player champion season)")
         data = merge_roles(data, team, "_WinRate(player season)")
 
@@ -284,18 +284,21 @@ def preprocess_features(data, show_example=False):
         data = merge_roles(data, team, "_PlayRate(champion season)")
         data = merge_roles(data, team, "_WinRate(champion recent)")
         data = merge_roles(data, team, "_WinRate(champion version recent)")
+        data = merge_roles(data, team, "_WinRate(champion summoners recent)")
 
         data[team + "_Combined_WinRateSum_PlayedLogSum(player champion season)"] = data[team + "_WinRate(player champion season)_Sum"] * data[team + "_NumGames(player champion season)_LogSum"]
         data[team + "_Combined_WinRateSum_PlayedLogSum(cvr ps)"] = data[team + "_WinRate(champion version recent)_Sum"] * data[team + "_NumGames(player season)_LogSum"]
 
     # a few diff features
-    for feature_suffix in ["_WinRate(champion version recent)", "_WinRate(champion recent)", "_WinRate(champion season)", "_WinRate(player season)", "_PlayRate(champion season)"]:
+    for feature_suffix in ["_WinRate(champion version recent)", "_WinRate(champion recent)", "_WinRate(champion season)", "_WinRate(player season)", "_PlayRate(champion season)", "_WinRate(champion summoners recent)"]:
         data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
         data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
 
 
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player champion season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(cvr ps)")
+
+    data = data.drop([c for c in data.columns if "champion summoners recent" in c], axis=1)
 
     data = pandas.get_dummies(data)
 
