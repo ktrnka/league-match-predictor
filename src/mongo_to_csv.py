@@ -117,14 +117,10 @@ def main():
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
-    riot_cache.preload_player_stats()
     riot_cache.precompute_champion_damage()
-
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
-    # champion_stats_match_history = riot_cache.aggregate_match_stats()
-
-    logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
+    logger.info("Computing champion damage and aggregate stats took %.1f sec", time.time() - previous_time)
 
     match_history_stats = dict()
     player_history_stats = dict()
@@ -152,7 +148,7 @@ def main():
                     assert isinstance(player, riot_data.Participant)
                     player_features.append(riot_connection.get_champion_name(player.champion_id))
 
-                    player_stats = riot_cache.get_player_stats(player.id, force_cache=True)
+                    player_stats = riot_cache.get_player_stats(player.id)
                     assert isinstance(player_stats, riot_data.PlayerStats)
 
                     damage_types.update(riot_cache.get_champion_damage_types(player.champion_id))

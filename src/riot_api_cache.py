@@ -1,11 +1,13 @@
 from __future__ import unicode_literals
 import collections
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 import sys
 import argparse
+import functools32
 
 import pymongo
+import pymongo.errors
 import riot_api
 
 import riot_data
@@ -101,8 +103,6 @@ class ApiCache(object):
 
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
-
-        self.ranked_stats_cache = dict()
 
 
     def queue_match(self, match):
@@ -228,23 +228,21 @@ class ApiCache(object):
         elif result["nModified"] == 0:
             self.outcomes["summary stats: identical update"] += 1
 
-    def get_player_stats(self, player_id, force_cache=False):
+    @functools32.lru_cache(5000)
+    def get_player_stats(self, player_id, retries_remaining=3):
         assert isinstance(player_id, int)
 
-        if not force_cache:
-            if player_id not in self.ranked_stats_cache:
-                try:
-                    result = self.players.find_one(Envelope.query_data({"id": player_id}))
-                    self.ranked_stats_cache[player_id] = riot_data.PlayerStats(result["data"]["stats"])
-                except (TypeError, KeyError):
-                    self.ranked_stats_cache[player_id] = riot_data.PlayerStats.make_blank()
-
-        return self.ranked_stats_cache[player_id]
-
-    def preload_player_stats(self):
-        self.ranked_stats_cache = collections.defaultdict(riot_data.PlayerStats.make_blank)
-        for result in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
-            self.ranked_stats_cache[result["data"]["id"]] = riot_data.PlayerStats(result["data"]["stats"])
+        try:
+            result = self.players.find_one(Envelope.query_data({"id": player_id}))
+            return riot_data.PlayerStats(result["data"]["stats"])
+        except (TypeError, KeyError):
+            return riot_data.PlayerStats.make_blank()
+        except pymongo.errors.AutoReconnect:
+            if retries_remaining:
+                return self.get_player_stats(player_id, retries_remaining-1)
+            else:
+                self.logger.error("Failed to reconnect, giving up and setting empty stats")
+                return riot_data.PlayerStats.make_blank()
 
     def update_match_history_refresh(self, player, recrawl_date):
         result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
@@ -297,7 +295,7 @@ class ApiCache(object):
         self.logger.info("Result from pruning detail fields: %s", result)
 
     def get_matches(self, chronological=False):
-        c = self.matches.find(Envelope.query_queued(False))
+        c = self.matches.find(Envelope.query_queued(False)).batch_size(100)
         if chronological:
             c = c.sort("data.matchCreation", pymongo.ASCENDING)
         for match_data in c:
@@ -305,7 +303,8 @@ class ApiCache(object):
 
     def precompute_champion_damage(self):
         play_rates = collections.Counter()
-        for player_stats in self.ranked_stats_cache.itervalues():
+        for player_stats_data in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
+            player_stats = riot_data.PlayerStats(player_stats_data["data"]["stats"])
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
                 num_played = float(champion_stats["totalSessionsPlayed"])
                 play_rates[champion_id] += num_played
@@ -325,8 +324,8 @@ class ApiCache(object):
         total_data = collections.Counter()
         champion_data = collections.defaultdict(collections.Counter)
 
-        for player_stats in self.ranked_stats_cache.itervalues():
-            assert isinstance(player_stats, riot_data.PlayerStats)
+        for player_stats_data in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
+            player_stats = riot_data.PlayerStats(player_stats_data["data"]["stats"])
 
             for champion_id, champion_stats_dict in player_stats.champion_stats.iteritems():
                 if champion_id == 0:

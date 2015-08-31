@@ -226,7 +226,7 @@ class PlayerStats(object):
     def __init__(self, data):
         self.summoner_id = data["summonerId"]
         self.modify_date = data["modifyDate"]
-        self.champion_stats = {record["id"]: record["stats"] for record in data["champions"]}
+        self.champion_stats = {record["id"]: record["stats"] for record in data["champions"] if record["id"] != 0}
         self.totals = _merge_stats(self.champion_stats.itervalues())
 
         self.winning_streak_games = 0
@@ -292,20 +292,20 @@ class ChampionStats(object):
         self.physical_damage = data["totalPhysicalDamageDealt"]
         self.total_damage = data["totalDamageDealt"]
 
-        self.damage_taken = data["totalDamageTaken"]
-
-        self.kills = data["totalChampionKills"]
-        self.deaths = data["totalDeathsPerSession"]
-        self.assists = data["totalAssists"]
-
-        self.num_first_blood = data["totalFirstBlood"]
-
-        self.double_kills = data["totalDoubleKills"]
-        self.triple_kills = data["totalTripleKills"]
-        self.quadra_kills = data["totalQuadraKills"]
-        self.penta_kills = data["totalPentaKills"]
-
-        self.turret_kills = data["totalTurretsKilled"]
+        # self.damage_taken = data["totalDamageTaken"]
+        #
+        # self.kills = data["totalChampionKills"]
+        # self.deaths = data["totalDeathsPerSession"]
+        # self.assists = data["totalAssists"]
+        #
+        # self.num_first_blood = data["totalFirstBlood"]
+        #
+        # self.double_kills = data["totalDoubleKills"]
+        # self.triple_kills = data["totalTripleKills"]
+        # self.quadra_kills = data["totalQuadraKills"]
+        # self.penta_kills = data["totalPentaKills"]
+        #
+        # self.turret_kills = data["totalTurretsKilled"]
 
     @staticmethod
     def from_wins_played(num_wins, num_played):
@@ -315,25 +315,27 @@ class ChampionStats(object):
         return ChampionStats(data)
 
     def get_kda(self, remove_stats=None):
-        kills = self.kills
-        assists = self.assists
-        deaths = self.deaths
-        if remove_stats:
-            kills -= remove_stats.kills
-            assists -= remove_stats.assists
-            deaths -= remove_stats.deaths
-
-        return (kills + assists + 1) / float(deaths + 1)
+        return 1
+        # kills = self.kills
+        # assists = self.assists
+        # deaths = self.deaths
+        # if remove_stats:
+        #     kills -= remove_stats.kills
+        #     assists -= remove_stats.assists
+        #     deaths -= remove_stats.deaths
+        #
+        # return (kills + assists + 1) / float(deaths + 1)
 
     def get_damage_efficiency(self, remove_stats=None):
-        damage_dealt = self.total_damage
-        damage_taken = self.damage_taken
-
-        if remove_stats:
-            damage_dealt -= remove_stats.total_damage
-            damage_taken -= remove_stats.damage_taken
-
-        return (damage_dealt + 1) / float(damage_taken + 1)
+        return 1
+        # damage_dealt = self.total_damage
+        # damage_taken = self.damage_taken
+        #
+        # if remove_stats:
+        #     damage_dealt -= remove_stats.total_damage
+        #     damage_taken -= remove_stats.damage_taken
+        #
+        # return (damage_dealt + 1) / float(damage_taken + 1)
 
     def get_win_rate(self, remove_games=0, remove_wins=0, remove_stats=None):
 
