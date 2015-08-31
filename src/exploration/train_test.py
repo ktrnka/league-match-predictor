@@ -315,12 +315,13 @@ def preprocess_features(data, show_example=False):
         data = merge_roles(data, team, "_WinRate(player season)")
 
         # win rates and play rates from the general population
-        data = merge_roles(data, team, "_WinRate(champion season)", include_min=False)
+        data = merge_roles(data, team, "_WinRate(champion season)", include_max=False, include_min=False)
         data = merge_roles(data, team, "_PlayRate(champion season)", include_max=False, include_min=False)
         data = merge_roles(data, team, "_WinRate(champion recent)", include_min=False)
         data = merge_roles(data, team, "_WinRate(champion version recent)", include_min=False)
 
         data[team + "_Combined_WinRateSum_PlayedLogSum(player champion season)"] = data[team + "_WinRate(player champion season)_Sum"] * data[team + "_NumGames(player champion season)_LogSum"]
+        data[team + "_Combined_WinRateSum_PlayedLogSum(player season)"] = data[team + "_WinRate(player season)_Sum"] * data[team + "_NumGames(player season)_LogSum"]
         data[team + "_Combined_WinRateSum_PlayedLogSum(cvr ps)"] = data[team + "_WinRate(champion version recent)_Sum"] * data[team + "_NumGames(player season)_LogSum"]
 
     # a few diff features
@@ -330,6 +331,7 @@ def preprocess_features(data, show_example=False):
 
 
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player champion season)")
+    data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(cvr ps)")
 
     data = pandas.get_dummies(data)
@@ -342,7 +344,7 @@ def preprocess_features(data, show_example=False):
 
     if show_example:
         print "Example data"
-        for name, value in zip(data.columns, data.values[0,:]):
+        for name, value in zip(data.columns, data.values[0, :]):
             print "{}: {}".format(name, value)
 
     return data
