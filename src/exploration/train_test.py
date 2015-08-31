@@ -76,9 +76,11 @@ def convert_to_indicators(data, column, drop=True, min_values=1):
 def print_feature_importances(columns, classifier):
     """Show feature importances for a classifier that supports them like random forest or gradient boosting"""
     paired_features = zip(columns, classifier.feature_importances_)
+    field_width = unicode(max(len(c) for c in columns))
+    format_string = "\t{:" + field_width + "s}: {}"
     print "Feature importances"
     for feature_name, importance in sorted(paired_features, key=itemgetter(1), reverse=True):
-        print "\t{:20s}: {}".format(feature_name, importance)
+        print format_string.format(feature_name, importance)
 
 
 def parse_args():
@@ -108,6 +110,7 @@ def random_forest(X, y, data, split_iterator):
     print_tuning_scores(grid_search)
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
 
+
 def decision_tree(X, y, data, split_iterator):
     tree = sklearn.tree.DecisionTreeClassifier()
 
@@ -122,10 +125,11 @@ def decision_tree(X, y, data, split_iterator):
 def print_logistic_regression_feature_importances(column_names, classifier):
     parameters = classifier.coef_[0,:]
     paired = zip(column_names, parameters)
-
+    field_width = unicode(max(len(c) for c in column_names))
+    format_string = "\t{:" + field_width + "s}: {}"
     print "Feature weights in logistic regression"
     for name, weight in sorted(paired, key=itemgetter(1), reverse=True):
-        print "\t{:20s}: {}".format(name, weight)
+        print format_string.format(name, weight)
 
 
 def logistic_regression(X, y, data, split_iterator, pca=False):
@@ -167,6 +171,7 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
         print "Logistic regression with PCA at {} components".format(num_components)
         print_tuning_scores(grid_search)
 
+
 def elastic_net(X, y, split_iterator):
     # note that GridSearchCV doesn't work with ElasticNet; need to use ElasticNetCV to select alpha and such
     grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=N_JOBS, cv=split_iterator, n_alphas=100)
@@ -178,7 +183,6 @@ def elastic_net(X, y, split_iterator):
         mse = grid_search.mse_path_[i, :]
 
         print "\tAlpha {:.3f} = {:.2f}% +/- {:.2f}%".format(alpha, 100 * (1 - mse.mean()), 100 * mse.std())
-
 
 
 def gradient_boosting_exp(X, y, data, split_iterator):
@@ -289,7 +293,8 @@ def drop_bad_features(data):
 def preprocess_features(data, show_example=False):
     print "Before preprocessing"
     data.info()
-    print "Columns: " + ", ".join(sorted(data.columns))
+    old_columns = sorted(data.columns)
+    print "Columns: " + ", ".join(old_columns)
 
     data = drop_bad_features(data)
 
@@ -310,10 +315,10 @@ def preprocess_features(data, show_example=False):
         data = merge_roles(data, team, "_WinRate(player season)")
 
         # win rates and play rates from the general population
-        data = merge_roles(data, team, "_WinRate(champion season)")
-        data = merge_roles(data, team, "_PlayRate(champion season)")
-        data = merge_roles(data, team, "_WinRate(champion recent)")
-        data = merge_roles(data, team, "_WinRate(champion version recent)")
+        data = merge_roles(data, team, "_WinRate(champion season)", include_min=False)
+        data = merge_roles(data, team, "_PlayRate(champion season)", include_max=False, include_min=False)
+        data = merge_roles(data, team, "_WinRate(champion recent)", include_min=False)
+        data = merge_roles(data, team, "_WinRate(champion version recent)", include_min=False)
 
         data[team + "_Combined_WinRateSum_PlayedLogSum(player champion season)"] = data[team + "_WinRate(player champion season)_Sum"] * data[team + "_NumGames(player champion season)_LogSum"]
         data[team + "_Combined_WinRateSum_PlayedLogSum(cvr ps)"] = data[team + "_WinRate(champion version recent)_Sum"] * data[team + "_NumGames(player season)_LogSum"]
@@ -333,6 +338,7 @@ def preprocess_features(data, show_example=False):
     data.info()
     print data.describe()
     print "Columns: " + ", ".join(sorted(data.columns))
+    print "Number of columns changed from {} -> {}".format(len(old_columns), len(data.columns))
 
     if show_example:
         print "Example data"
