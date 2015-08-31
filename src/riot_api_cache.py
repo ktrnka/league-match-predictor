@@ -6,6 +6,7 @@ import sys
 import argparse
 
 import pymongo
+import riot_api
 
 import riot_data
 
@@ -213,7 +214,6 @@ class ApiCache(object):
         for result in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
             self.ranked_stats_cache[result["data"]["id"]] = riot_data.PlayerStats(result["data"]["stats"])
 
-
     def update_match_history_refresh(self, player, recrawl_date):
         result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
         self.logger.debug("Updated %d match hist refresh for id %d", result["nModified"], player.id)
@@ -321,6 +321,48 @@ class ApiCache(object):
             win_stats[key] = riot_data.ChampionStats.from_wins_played(games_won[key], games_played[key])
 
         return win_stats
+
+
+class MemoizeCache(ApiCache):
+    def __init__(self, config, riot_connection):
+        super(MemoizeCache, self).__init__(config)
+
+        assert isinstance(riot_connection, riot_api.RiotService)
+        self.riot_connection = riot_connection
+
+    def get_ranked_stats(self, player_id):
+        """Look up the player's ranked stats, preferring mongodb cache over Riot API"""
+        assert isinstance(player_id, int)
+
+        # cache lookup
+        ranked_stats = self.get_player_stats(player_id)
+        if ranked_stats:
+            return ranked_stats
+
+        # API lookup
+        ranked_stats = self.riot_connection.get_summoner_ranked_stats(player_id)
+        if ranked_stats:
+            self.update_player_stats(player_id, ranked_stats)
+            return riot_data.PlayerStats(ranked_stats)
+
+        return None
+
+    def get_match(self, match_id):
+        assert isinstance(match_id, int)
+
+        # cache lookup
+        match_data = self.matches.find(Envelope.query_data({"matchId": match_id}))
+        if match_data:
+            return riot_data.Match(match_data)
+
+        # API lookup
+        match_data = self.riot_connection.get_match(match_id)
+        if match_data:
+            match = riot_data.Match(match_data)
+            self.update_match(match)
+            return match
+
+        return None
 
 
 def parse_args():
