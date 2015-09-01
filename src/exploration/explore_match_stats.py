@@ -84,13 +84,6 @@ def explore_champions(riot_cache, riot_connection):
             if team_id == winner:
                 victor_counts.update(champion_set)
 
-    # compute champion win rates from player histories
-    # quickly load all player stats into RAM so we can join more quickly
-    previous_time = time.time()
-    riot_cache.preload_player_stats()
-    riot_cache.precompute_champion_damage()
-    print "Preloading player stats took", time.time() - previous_time
-
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
     print "Champion IDs found: {}".format(sorted(played_counts.keys()))

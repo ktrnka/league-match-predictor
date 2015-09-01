@@ -56,8 +56,7 @@ def main():
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
-    riot_cache.preload_player_stats()
-    riot_cache.precompute_champion_damage()
+    riot_cache.compute_champion_damage_types()
     logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
 
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()

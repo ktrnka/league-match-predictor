@@ -1,6 +1,6 @@
 from __future__ import unicode_literals
 import collections
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import sys
 import argparse
@@ -87,7 +87,6 @@ class ComputeResultEnvelope(object):
 class ApiCache(object):
     def __init__(self, config):
         self.outcomes = collections.Counter()
-        self.champion_damages = collections.defaultdict(collections.Counter)
 
         # matches
         self.__matches_mongo_client = pymongo.MongoClient(config.get("mongo", "match_uri"))
@@ -301,23 +300,24 @@ class ApiCache(object):
         for match_data in c:
             yield riot_data.Match(match_data["data"])
 
-    def precompute_champion_damage(self):
+    def compute_champion_damage_types(self):
+        champion_damages = collections.defaultdict(collections.Counter)
         play_rates = collections.Counter()
+
         for player_stats_data in self.players.find(Envelope.query_data({"stats.champions": {"$exists": True}})):
             player_stats = riot_data.PlayerStats(player_stats_data["data"]["stats"])
             for champion_id, champion_stats in player_stats.champion_stats.iteritems():
                 num_played = float(champion_stats["totalSessionsPlayed"])
                 play_rates[champion_id] += num_played
-                self.champion_damages[champion_id]["magic"] += champion_stats["totalMagicDamageDealt"]
-                self.champion_damages[champion_id]["physical"] += champion_stats["totalPhysicalDamageDealt"]
-                self.champion_damages[champion_id]["true"] += (champion_stats["totalDamageDealt"] - (champion_stats["totalMagicDamageDealt"] + champion_stats["totalPhysicalDamageDealt"]))
+                champion_damages[champion_id]["magic"] += champion_stats["totalMagicDamageDealt"]
+                champion_damages[champion_id]["physical"] += champion_stats["totalPhysicalDamageDealt"]
+                champion_damages[champion_id]["true"] += (champion_stats["totalDamageDealt"] - (champion_stats["totalMagicDamageDealt"] + champion_stats["totalPhysicalDamageDealt"]))
 
-        for champion_id, champion_damage_stats in self.champion_damages.iteritems():
+        for champion_id, champion_damage_stats in champion_damages.iteritems():
             for damage_type in champion_damage_stats.iterkeys():
                 champion_damage_stats[damage_type] /= play_rates[champion_id]
 
-    def get_champion_damage_types(self, champion_id):
-        return self.champion_damages[champion_id]
+        return champion_damages
 
     def aggregate_champion_stats(self):
         """Aggregate all stats across all champions and return a ChampionStats, dict(id -> ChampionStats)"""

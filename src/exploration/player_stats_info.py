@@ -35,11 +35,6 @@ def main():
     riot_connection = riot_api.RiotService.from_config(config)
 
     # quickly load all player stats into RAM so we can join more quickly
-    previous_time = time.time()
-    riot_cache.preload_player_stats()
-    riot_cache.precompute_champion_damage()
-    logger.info("Preloading player stats took %.1f sec", time.time() - previous_time)
-
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
     print "Aggregated stats cover {:,} games".format(agg_stats.played)

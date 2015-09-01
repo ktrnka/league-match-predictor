@@ -117,7 +117,7 @@ def main():
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
-    riot_cache.precompute_champion_damage()
+    champion_damage_types = riot_cache.compute_champion_damage_types()
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
     logger.info("Computing champion damage and aggregate stats took %.1f sec", time.time() - previous_time)
@@ -151,7 +151,7 @@ def main():
                     player_stats = riot_cache.get_player_stats(player.id)
                     assert isinstance(player_stats, riot_data.PlayerStats)
 
-                    damage_types.update(riot_cache.get_champion_damage_types(player.champion_id))
+                    damage_types.update(champion_damage_types[player.champion_id])
 
                     remove_match_player_stats = 0
                     remove_win_player_stats = 0
