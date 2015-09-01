@@ -1,6 +1,6 @@
 from __future__ import unicode_literals
 import collections
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import sys
 import argparse
@@ -16,6 +16,8 @@ _ENVELOPE_UPDATED_DATE = "updated"
 _ENVELOPE_IS_QUEUED = "queued"
 
 _ENVELOPE_DATA = "data"
+
+_ENVELOPE_KEY = "key"
 
 _MONGO_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -48,6 +50,36 @@ class Envelope(object):
     @staticmethod
     def query_data(data_query):
         return {"data.{}".format(k): v for k, v in data_query.iteritems()}
+
+
+class ComputeResultEnvelope(object):
+    """Wraps any dict-like structure that is the result of computation, like stat breakdowns by champion"""
+
+    def __init__(self, name, data, created):
+        self.key = name
+        self.data = data
+        self.updated = created
+
+        assert isinstance(name, basestring)
+        assert isinstance(created, datetime)
+
+    @staticmethod
+    def unwrap(mongo_object):
+        return ComputeResultEnvelope(mongo_object[_ENVELOPE_KEY],
+                                     mongo_object[_ENVELOPE_DATA],
+                                     datetime.strptime(mongo_object[_ENVELOPE_UPDATED_DATE], _MONGO_DATE_FORMAT))
+
+    def wrap(self):
+        return {_ENVELOPE_KEY: self.key,
+                _ENVELOPE_DATA: self.data,
+                _ENVELOPE_UPDATED_DATE: self.updated.strftime(_MONGO_DATE_FORMAT)}
+
+    def is_stale(self, max_age_days=7):
+        return datetime.now() - self.updated > timedelta(max_age_days)
+
+    @staticmethod
+    def query_key(name):
+        return {_ENVELOPE_KEY: name}
 
 
 class ApiCache(object):
