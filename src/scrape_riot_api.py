@@ -113,10 +113,10 @@ def update_summoners(riot_cache, riot_connection, queued_counts, min_players=200
             continue
 
         # refresh ranked stats
-        refresh_ranked_stats(riot_connection, riot_cache, player, refresh_outcomes)
+        # refresh_ranked_stats(riot_connection, riot_cache, player, refresh_outcomes)
 
         # refresh summary stats
-        refresh_summary_stats(riot_connection, riot_cache, player, refresh_outcomes)
+        # refresh_summary_stats(riot_connection, riot_cache, player, refresh_outcomes)
 
         # refresh match history
         matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player)

@@ -189,7 +189,7 @@ def gradient_boosting_exp(X, y, data, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
         "learning_rate": [0.75, 0.9, 1.],
-        "min_samples_leaf": [20]
+        "min_samples_leaf": [20],
     }
 
     grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator,
