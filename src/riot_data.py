@@ -3,6 +3,7 @@ import sys
 import argparse
 import datetime
 import collections
+import utilities
 
 
 def parse_args():
@@ -370,5 +371,30 @@ class ChampionStats(object):
             remove_games = 0
 
         return self.played - remove_games
+
+class League(object):
+    __DIVISION_ADDS = {"I": 400, "II": 300, "III": 200, "IV": 100, "V": 0}
+    def __init__(self, queue, tier, division, points):
+        self.tier = tier
+        self.queue = queue
+        self.division = division
+        self.points = points
+
+    def get_merged_division_points(self):
+        # This isn't correct for challenger and maybe not master either
+        return self.points + self.__DIVISION_ADDS[self.division]
+
+    @staticmethod
+    def from_response(league_data):
+        for player_team_id, data in league_data.iteritems():
+            entry = League.__find_entry(data["entries"], player_team_id)
+            yield League(data["queue"], data["tier"], entry["division"], entry["lp"])
+
+    @staticmethod
+    def __find_entry(entries, player_team_id):
+        for league_entry in entries:
+            if league_entry["playerOrTeamId"] == player_team_id:
+                return league_entry
+
 
 EMPTY_CHAMPION_STATS = ChampionStats(collections.Counter())

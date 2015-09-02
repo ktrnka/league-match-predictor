@@ -11,6 +11,7 @@ import pymongo.errors
 import riot_api
 
 import riot_data
+import utilities
 
 
 _ENVELOPE_UPDATED_DATE = "updated"
@@ -230,8 +231,7 @@ class ApiCache(object):
         assert isinstance(player, riot_data.Summoner)
         assert isinstance(league, riot_data.League)
 
-        print "set_league not implemented yet"
-        assert False
+        raise utilities.DevReminderError("set_league not implemented yet")
 
     def update_player_summary_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)

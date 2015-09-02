@@ -26,6 +26,12 @@ class ThrottledFilter(logging.Filter):
         return False
 
 
+class DevReminderError(BaseException):
+    """Error to remind me to implement something"""
+    def __init__(self, message):
+        super(DevReminderError, self).__init__(message)
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     return parser.parse_args()

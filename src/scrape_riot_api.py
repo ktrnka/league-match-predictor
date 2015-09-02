@@ -10,6 +10,7 @@ import riot_api
 import riot_api_cache
 import riot_data
 import requests.exceptions
+from utilities import DevReminderError
 
 EPOCH = datetime.datetime.utcfromtimestamp(0)
 
@@ -60,25 +61,6 @@ def update_summoner_names(riot_cache, riot_connection, queued_counts, min_player
         riot_cache.update_players(players)
 
 
-def refresh_ranked_stats(riot_connection, riot_cache, player, outcome_counter):
-    try:
-        player_stats = riot_connection.get_summoner_ranked_stats(player.id)
-        riot_cache.update_player_stats(player.id, player_stats)
-        outcome_counter["update ranked success"] += 1
-    except riot_api.SummonerNotFoundError:
-        riot_cache.update_player_stats(player.id, {})
-        outcome_counter["update ranked failure"] += 1
-
-
-def refresh_summary_stats(riot_connection, riot_cache, player, outcome_counter):
-    try:
-        player_stats = riot_connection.get_summoner_summary_stats(player.id)
-        riot_cache.update_player_summary_stats(player.id, player_stats)
-        outcome_counter["update summary success"] += 1
-    except riot_api.SummonerNotFoundError:
-        outcome_counter["update summary failure"] += 1
-
-
 def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
     try:
         matches = list(riot_connection.get_match_history(player.id))
@@ -91,6 +73,7 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
         logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
         riot_cache.remove_player(player)
 
+    raise DevReminderError("Update refresh_match_history to use match list and add match stub data structure")
     return None
 
 
@@ -109,13 +92,6 @@ def update_summoners(riot_cache, riot_connection, queued_counts, min_players=200
             logger.error("Player with non-int ID: {}, type={}".format(player, type(player.id)))
             continue
 
-        # refresh ranked stats
-        # refresh_ranked_stats(riot_connection, riot_cache, player, refresh_outcomes)
-
-        # refresh summary stats
-        # refresh_summary_stats(riot_connection, riot_cache, player, refresh_outcomes)
-
-        # refresh match history
         matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player)
 
         # set the recrawl date
@@ -131,6 +107,8 @@ def update_summoners(riot_cache, riot_connection, queued_counts, min_players=200
 
 def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
     logger = logging.getLogger(__name__)
+
+    raise DevReminderError("Refactor update_matches to fetch some matches and just queue some new players")
 
     max_matches = min(min_matches * 3, max(min_matches, queued_counts["match"] * 2))
     logger.info("Fetching queued matches, up to %d", max_matches)
@@ -164,6 +142,8 @@ def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
 
 
 def get_recrawl_date(matches, max_matches=15):
+    raise DevReminderError("Update get_recrawl_date for larger number of matches in match-list")
+
     date_format = "%Y-%m-%d %H:%M:%S"
 
     dates = [match.get_creation_datetime() for match in matches]
@@ -252,8 +232,6 @@ def main():
         # update from match list endpoint
         update_summoners(riot_cache, riot_connection, queued_counts)
         update_matches(riot_cache, riot_connection, queued_counts)
-
-        # queue up featured matches last because they will automatically fail to get match data for a while
 
         logger.info("Found %d new players, %d new matches", queued_counts["player"], queued_counts["match"])
 

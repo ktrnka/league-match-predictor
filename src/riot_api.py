@@ -211,6 +211,10 @@ class RiotService(object):
 
         return [riot_data.Summoner(s) for s in data.itervalues()]
 
+    def get_leagues(self, player_ids):
+        raise utilities.DevReminderError("set_league not implemented yet")
+
+
     def get_featured_matches(self):
         data = self.request("featured", self.observer_base_url)
         self.request_types["featured"] += 1
