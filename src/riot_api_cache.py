@@ -56,6 +56,10 @@ class Envelope(object):
     def query_data(data_query):
         return {"data.{}".format(k): v for k, v in data_query.iteritems()}
 
+    @staticmethod
+    def set_queued(queued):
+        return {"$set": {_ENVELOPE_IS_QUEUED: queued}}
+
 
 class ComputeResultEnvelope(object):
     """Wraps any dict-like structure that is the result of computation, like stat breakdowns by champion"""
@@ -211,16 +215,24 @@ class ApiCache(object):
         return player_ids
 
     def update_player_names(self, players):
+        new_count = 0
+        updated_count = 0
+
         for player in players:
             assert isinstance(player, riot_data.Summoner)
             self.logger.debug("Updating %d -> %s", player.id, player.name)
 
+            # TODO: Convert this to a clever upsert.
             if self.players.find(Envelope.query_data({"id": player.id})):
                 result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"data.name": player.name}})
                 self.logger.info("Updated player name, result: %s", result)
+                updated_count += 1
             else:
                 result = self.players.insert_one(Envelope.wrap(player.export(), False))
                 self.logger.info("Inserted player and name, result: %s", result)
+                new_count += 1
+
+        return new_count, updated_count
 
     def update_player_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)
@@ -270,6 +282,9 @@ class ApiCache(object):
 
     def update_match(self, match):
         self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.wrap(match, False))
+
+    def dequeue_match(self, match):
+        self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.set_queued(False))
 
     def remove_match(self, match_id):
         result = self.matches.delete_one(Envelope.query_data({"matchId": match_id}))

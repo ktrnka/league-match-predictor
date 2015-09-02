@@ -28,7 +28,7 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def queue_featured(riot_cache, riot_connection):
+def queue_featured(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
     logger.info("Fetching featured matches and queueing players in them")
 
@@ -43,7 +43,8 @@ def queue_featured(riot_cache, riot_connection):
 
     for player_names in chunks(summoner_names, 40):
         players = riot_connection.get_summoners(names=player_names)
-        riot_cache.update_player_names(players)
+        new_count, updated_count = riot_cache.update_player_names(players)
+        queued_counts["player"] += new_count
 
 
 def update_summoner_names(riot_cache, riot_connection, queued_counts, min_players=100, chunk_size=40):
@@ -115,7 +116,8 @@ def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
 
         try:
             match_info = riot_connection.get_match(match_id)
-            riot_cache.update_match(match_info)
+
+            riot_cache.dequeue_match(match_info)
 
             try:
                 parsed_match = riot_data.Match(match_info)
@@ -159,13 +161,14 @@ def get_recrawl_delay(num_days):
     return (datetime.datetime.now() - EPOCH + datetime.timedelta(days=num_days)).total_seconds()
 
 
-def queue_master_plus(riot_cache, riot_connection):
+def queue_master_plus(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
     added_players = 0
     for player in riot_connection.get_master_plus_solo():
         if riot_cache.queue_player(player):
             added_players += 1
+            queued_counts["player"] += 1
 
     logger.info("Queued %d new summoners from crawling masters and challenger", added_players)
 
@@ -211,15 +214,15 @@ def main():
         queued_counts = collections.Counter()
 
         # extract players from featured matches
-        queue_featured(riot_cache, riot_connection)
+        queue_featured(riot_cache, riot_connection, queued_counts)
 
         # find players from masters and challenger and add them
-        queue_master_plus(riot_cache, riot_connection)
+        queue_master_plus(riot_cache, riot_connection, queued_counts)
 
         # make sure we have summoner names (for convenience)
         update_summoner_names(riot_cache, riot_connection, queued_counts)
 
-        # make sure we have their leagues (WORKING ON THIS NOW)
+        # make sure we have their leagues
         # update_summoner_leagues(riot_cache, riot_connection, queued_counts)
 
         update_match_histories(riot_cache, riot_connection, queued_counts)
