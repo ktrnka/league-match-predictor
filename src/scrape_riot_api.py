@@ -80,16 +80,12 @@ def update_match_histories(riot_cache, riot_connection, queued_counts, min_playe
     logger = logging.getLogger(__name__)
 
     max_players = max(min_players, queued_counts["player"] * 2)
-    logger.info("Updating ranked/summary stats and match history, up to %d players", max_players)
+    logger.info("Updating match history, up to %d players", max_players)
 
     refresh_outcomes = collections.Counter()
 
     for player in riot_cache.get_players_recrawl(max_players):
         assert isinstance(player, riot_data.Summoner)
-        if not isinstance(player.id, int):
-            # Error was triggered by a string ID which shouldn't be possible
-            logger.error("Player with non-int ID: {}, type={}".format(player, type(player.id)))
-            continue
 
         matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player)
 
