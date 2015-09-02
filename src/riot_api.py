@@ -225,12 +225,12 @@ class RiotService(object):
             raise InvalidIdError("summoner_id must be a valid int")
 
         try:
-            data = self.request("v2.2/matchhistory/{}".format(summoner_id), additional_params={"endIndex": 15})
-            self.request_types["matchhistory"] += 1
+            data = self.request("v2.2/matchlist/by-summoner/{}".format(summoner_id))
+            self.request_types["matchlist"] += 1
 
             if data:
                 for match in data["matches"]:
-                    yield riot_data.Match(match)
+                    yield riot_data.MatchReference(match)
         except requests.HTTPError as exc:
             self.logger.exception("Ignoring error in match history")
 

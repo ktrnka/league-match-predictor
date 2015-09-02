@@ -77,7 +77,7 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
     return None
 
 
-def update_summoners(riot_cache, riot_connection, queued_counts, min_players=200):
+def update_match_histories(riot_cache, riot_connection, queued_counts, min_players=200):
     logger = logging.getLogger(__name__)
 
     max_players = max(min_players, queued_counts["player"] * 2)
@@ -224,13 +224,10 @@ def main():
         # make sure we have summoner names (for my convenience)
         update_summoner_names(riot_cache, riot_connection, queued_counts)
 
-        # CONVERTED TO HERE
-
         # make sure we have their leagues (WORKING ON THIS NOW)
-        update_summoner_leagues(riot_cache, riot_connection, queued_counts)
+        # update_summoner_leagues(riot_cache, riot_connection, queued_counts)
 
-        # update from match list endpoint
-        update_summoners(riot_cache, riot_connection, queued_counts)
+        update_match_histories(riot_cache, riot_connection, queued_counts)
         update_matches(riot_cache, riot_connection, queued_counts)
 
         logger.info("Found %d new players, %d new matches", queued_counts["player"], queued_counts["match"])

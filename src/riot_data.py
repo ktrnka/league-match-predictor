@@ -3,7 +3,6 @@ import sys
 import argparse
 import datetime
 import collections
-import utilities
 
 
 def parse_args():
@@ -30,7 +29,6 @@ class Tier(object):
     @staticmethod
     def mean_level(tiers):
         return sum(Tier._indexes[tier] for tier in tiers) / len(tiers)
-
 
 
 class Champion(object):
@@ -105,11 +103,24 @@ class Queue(object):
         42: "RANKED_TEAM_5x5"
     }
 
+    interesting_queues = set(id_to_name.itervalues())
+
     @staticmethod
     def to_name(queue_id):
         assert isinstance(queue_id, int)
 
         return Queue.id_to_name.get(queue_id, unicode(queue_id))
+
+    @staticmethod
+    def is_interesting(queue_name):
+        assert isinstance(queue_name, basestring)
+        return queue_name in Queue.interesting_queues
+
+class Season(object):
+    @staticmethod
+    def is_interesting(season_name):
+        assert isinstance(season_name, basestring)
+        return season_name == "SEASON2015"
 
 class Match(object):
     QUEUE_RANKED_SOLO = "RANKED_SOLO_5x5"
@@ -213,6 +224,23 @@ class Match(object):
         wrapped_data["original_data"] = data
         return Match(wrapped_data)
 
+
+class MatchReference(object):
+    """Reference to a match without much detailed information"""
+    def __init__(self, data):
+        self.champion_id = data["champion"]
+        self.lane = data["lane"]
+        self.match_id = data["matchId"]
+        self.platform_id = data["platformId"]
+        self.queue = data["queue"]
+        self.role = data["role"]
+        self.season = data["season"]
+        self.timestamp = data["timestamp"]
+
+        self.full_data = data
+
+    def is_interesting(self):
+        return Season.is_interesting(self.season) and Queue.is_interesting(self.queue)
 
 def _merge_stats(champion_datas):
     totals = collections.Counter()
@@ -372,8 +400,11 @@ class ChampionStats(object):
 
         return self.played - remove_games
 
+
 class League(object):
+    """Represents someone's league entry"""
     __DIVISION_ADDS = {"I": 400, "II": 300, "III": 200, "IV": 100, "V": 0}
+
     def __init__(self, queue, tier, division, points):
         self.tier = tier
         self.queue = queue
@@ -381,7 +412,7 @@ class League(object):
         self.points = points
 
     def get_merged_division_points(self):
-        # This isn't correct for challenger and maybe not master either
+        # TODO: This isn't correct for challenger and maybe not master either
         return self.points + self.__DIVISION_ADDS[self.division]
 
     @staticmethod
