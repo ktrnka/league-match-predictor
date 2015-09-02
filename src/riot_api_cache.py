@@ -106,19 +106,18 @@ class ApiCache(object):
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
 
-
     def queue_match(self, match):
-        assert isinstance(match, riot_data.Match)
+        assert isinstance(match, riot_data.MatchReference)
 
-        match_data = self.matches.find_one(Envelope.query_data({"matchId": match.id}))
+        match_data = self.matches.find_one(Envelope.query_data({"matchId": match.match_id}))
 
         if not match_data:
-            self.logger.debug("Queueing match %d", match.id)
+            self.logger.debug("Queueing match %d", match.match_id)
             self.new_matches[True] += 1
             self.matches.insert_one(Envelope.wrap(match.export()))
             return True
         else:
-            self.logger.debug("Already queued match %d", match.id)
+            self.logger.debug("Already queued match %d", match.match_id)
             self.new_matches[False] += 1
             return False
 

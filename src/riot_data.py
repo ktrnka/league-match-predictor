@@ -242,6 +242,9 @@ class MatchReference(object):
     def is_interesting(self):
         return Season.is_interesting(self.season) and Queue.is_interesting(self.queue)
 
+    def export(self):
+        return self.full_data
+
 def _merge_stats(champion_datas):
     totals = collections.Counter()
 

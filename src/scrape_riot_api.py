@@ -65,7 +65,7 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
     try:
         matches = list(riot_connection.get_match_history(player.id))
         for match in matches:
-            if riot_cache.queue_match(match):
+            if match.is_interesting() and riot_cache.queue_match(match):
                 queued_counts["match"] += 1
 
         return matches
@@ -73,7 +73,6 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
         logging.getLogger(__name__).error("Bad summoner ID for player %s, removing", player)
         riot_cache.remove_player(player)
 
-    raise DevReminderError("Update refresh_match_history to use match list and add match stub data structure")
     return None
 
 
