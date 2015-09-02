@@ -43,7 +43,7 @@ def queue_featured(riot_cache, riot_connection):
 
     for player_names in chunks(summoner_names, 40):
         players = riot_connection.get_summoners(names=player_names)
-        riot_cache.update_players(players)
+        riot_cache.update_player_names(players)
 
 
 def update_summoner_names(riot_cache, riot_connection, queued_counts, min_players=100, chunk_size=40):
@@ -58,7 +58,7 @@ def update_summoner_names(riot_cache, riot_connection, queued_counts, min_player
 
     for player_ids in chunks(ids, chunk_size):
         players = riot_connection.get_summoners(ids=player_ids)
-        riot_cache.update_players(players)
+        riot_cache.update_player_names(players)
 
 
 def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
@@ -216,7 +216,7 @@ def main():
         # find players from masters and challenger and add them
         queue_master_plus(riot_cache, riot_connection)
 
-        # make sure we have summoner names (for my convenience)
+        # make sure we have summoner names (for convenience)
         update_summoner_names(riot_cache, riot_connection, queued_counts)
 
         # make sure we have their leagues (WORKING ON THIS NOW)

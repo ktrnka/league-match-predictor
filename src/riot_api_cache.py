@@ -210,11 +210,17 @@ class ApiCache(object):
 
         return player_ids
 
-    def update_players(self, players):
+    def update_player_names(self, players):
         for player in players:
             assert isinstance(player, riot_data.Summoner)
             self.logger.debug("Updating %d -> %s", player.id, player.name)
-            self.players.update(Envelope.query_data({"id": player.id}), Envelope.wrap(player.export(), False))
+
+            if self.players.find(Envelope.query_data({"id": player.id})):
+                result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"data.name": player.name}})
+                self.logger.info("Updated player name, result: %s", result)
+            else:
+                result = self.players.insert_one(Envelope.wrap(player.export(), False))
+                self.logger.info("Inserted player and name, result: %s", result)
 
     def update_player_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)
