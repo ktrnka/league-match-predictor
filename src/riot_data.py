@@ -122,21 +122,29 @@ class Season(object):
         assert isinstance(season_name, basestring)
         return season_name == "SEASON2015"
 
-class Match(object):
+class MatchBase(object):
+    def __init__(self, match_id, timestamp):
+        self.id = match_id
+        self.timestamp = timestamp
+
+    def get_creation_datetime(self):
+        # The creation time from API is milliseconds since the epoch not seconds
+        return datetime.datetime.fromtimestamp(self.timestamp / 1000.)
+
+
+class Match(MatchBase):
     QUEUE_RANKED_SOLO = "RANKED_SOLO_5x5"
     QUEUE_RANKED_5 = "RANKED_TEAM_5x5"
 
     def __init__(self, data):
-        self.id = data["matchId"]
+        super(Match, self).__init__(data["matchId"], data["matchCreation"])
+
         self.mode = data["matchMode"]
         self.type = data["matchType"]
-        self.creation_time = data["matchCreation"]
         self.duration = data["matchDuration"]
         self.queue_type = data["queueType"]
         self.version = data["matchVersion"]
-
         self.players = list(Participant.parse_participants(data["participants"], data["participantIdentities"]))
-
         self.full_data = data
 
     def get_winning_team_id(self):
@@ -196,11 +204,6 @@ class Match(object):
     def export(self):
         return self.full_data
 
-    def get_creation_datetime(self):
-        # The creation time from API is milliseconds since the epoch not seconds
-        # And it's pacific time not UTC
-        return datetime.datetime.fromtimestamp(self.creation_time / 1000.)
-
     @staticmethod
     def from_featured(data):
         """Parse a partial Match object from a featured match"""
@@ -225,22 +228,26 @@ class Match(object):
         return Match(wrapped_data)
 
 
-class MatchReference(object):
+class MatchReference(MatchBase):
     """Reference to a match without much detailed information"""
+
     def __init__(self, data):
+        super(MatchReference, self).__init__(data["matchId"], data["timestamp"])
+
         self.champion_id = data["champion"]
         self.lane = data["lane"]
-        self.match_id = data["matchId"]
         self.platform_id = data["platformId"]
         self.queue = data["queue"]
         self.role = data["role"]
         self.season = data["season"]
-        self.timestamp = data["timestamp"]
 
         self.full_data = data
 
     def is_interesting(self):
         return Season.is_interesting(self.season) and Queue.is_interesting(self.queue)
+
+    def get_creation_datetime(self):
+        return datetime.datetime.fromtimestamp(self.timestamp / 1000.)
 
     def export(self):
         return self.full_data
