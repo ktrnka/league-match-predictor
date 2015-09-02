@@ -27,18 +27,15 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def queue_featured(riot_cache, riot_connection, queued_counts):
+def queue_featured(riot_cache, riot_connection):
     logger = logging.getLogger(__name__)
-    logger.info("Fetching featured matches and queueing matches and players")
+    logger.info("Fetching featured matches and queueing players in them")
 
     summoner_names = []
 
     games, _ = riot_connection.get_featured_matches()
     for game_data in games:
         match = riot_data.Match.from_featured(game_data)
-
-        if riot_cache.queue_match(match):
-            queued_counts["match"] += 1
 
         for player in match.players:
             summoner_names.append(player.name)
@@ -48,17 +45,17 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
         riot_cache.update_players(players)
 
 
-def update_summoner_names(riot_cache, riot_connection, queued_counts, min_players=100):
+def update_summoner_names(riot_cache, riot_connection, queued_counts, min_players=100, chunk_size=40):
     logger = logging.getLogger(__name__)
 
     max_players = max(min_players, queued_counts["player"] * 2) * 40
     logger.info("Fetching summoner names, up to %d", max_players)
 
     ids = []
-    for player in riot_cache.get_queued(riot_cache.players, max_players):
+    for player in riot_cache.get_queued_players(riot_cache.players, max_players):
         ids.append(player["data"]["id"])
 
-    for player_ids in chunks(ids, 40):
+    for player_ids in chunks(ids, chunk_size):
         players = riot_connection.get_summoners(ids=player_ids)
         riot_cache.update_players(players)
 
@@ -187,16 +184,33 @@ def get_recrawl_delay(num_days):
     return (datetime.datetime.now() - EPOCH + datetime.timedelta(days=num_days)).total_seconds()
 
 
-def queue_master_plus(riot_cache, riot_connection, queued_counts):
+def queue_master_plus(riot_cache, riot_connection):
     logger = logging.getLogger(__name__)
 
-    added_summoners = 0
-    for summoner in riot_connection.get_master_plus_solo():
-        if riot_cache.queue_player(summoner):
-            added_summoners += 1
-            queued_counts["player"] += 1
+    added_players = 0
+    for player in riot_connection.get_master_plus_solo():
+        if riot_cache.queue_player(player):
+            added_players += 1
 
-    logger.info("Queued %d new summoners from crawling masters and challenger", added_summoners)
+    logger.info("Queued %d new summoners from crawling masters and challenger", added_players)
+
+
+def update_summoner_leagues(riot_cache, riot_connection, queued_counts):
+    logger = logging.getLogger(__name__)
+
+    max_players = max(100, queued_counts["player"] * 2) * 40
+    logger.info("Fetching summoner names, up to %d", max_players)
+
+    players = []
+    for player in riot_cache.get_queued_players(max_players, type=riot_api_cache.TYPE_LEAGUE):
+        players.append(player)
+
+    for player_chunk in chunks(players, 10):
+        player_ids = [p.id for p in player_chunk]
+        leagues = riot_connection.get_leagues(player_ids)
+
+        for player, league in zip(player_chunk, leagues):
+            riot_cache.set_league(player, league)
 
 
 def main():
@@ -221,15 +235,25 @@ def main():
     try:
         queued_counts = collections.Counter()
 
+        # extract players from featured matches
+        queue_featured(riot_cache, riot_connection)
+
         # find players from masters and challenger and add them
-        queue_master_plus(riot_cache, riot_connection, queued_counts)
+        queue_master_plus(riot_cache, riot_connection)
+
+        # make sure we have summoner names (for my convenience)
         update_summoner_names(riot_cache, riot_connection, queued_counts)
 
+        # CONVERTED TO HERE
+
+        # make sure we have their leagues (WORKING ON THIS NOW)
+        update_summoner_leagues(riot_cache, riot_connection, queued_counts)
+
+        # update from match list endpoint
         update_summoners(riot_cache, riot_connection, queued_counts)
         update_matches(riot_cache, riot_connection, queued_counts)
 
         # queue up featured matches last because they will automatically fail to get match data for a while
-        queue_featured(riot_cache, riot_connection, queued_counts)
 
         logger.info("Found %d new players, %d new matches", queued_counts["player"], queued_counts["match"])
 

@@ -27,6 +27,8 @@ MATCH_COLLECTION = "matches"
 
 PLAYER_COLLECTION = "summoners"
 
+TYPE_LEAGUE = "league"
+TYPE_QUEUED = "queued"
 
 class Envelope(object):
     """
@@ -137,9 +139,16 @@ class ApiCache(object):
             self.logger.debug("Already queued player %d", player.id)
             return False
 
-    def get_queued(self, collection, max_records):
-        for item in collection.find(Envelope.query_queued(True)).limit(max_records):
-            yield item
+    def get_queued_players(self, max_records, type=TYPE_QUEUED):
+        if type == TYPE_QUEUED:
+            c = self.players.find(Envelope.query_queued(True))
+        elif type == TYPE_LEAGUE:
+            c = self.players.find(Envelope.query_data({"league": {"$exists": False}}))
+        else:
+            raise ValueError("Type not recognized: {}".format(type))
+
+        for item in c.limit(max_records):
+            yield riot_data.Summoner(Envelope.unwrap(item))
 
     def get_queued_matches(self, max_records):
         # ranked 5v5
@@ -216,6 +225,13 @@ class ApiCache(object):
             self.logger.error("Bad result in setting player stats: %s", result)
         elif result["nModified"] == 0:
             self.outcomes["ranked stats: identical update"] += 1
+
+    def set_league(self, player, league):
+        assert isinstance(player, riot_data.Summoner)
+        assert isinstance(league, riot_data.League)
+
+        print "set_league not implemented yet"
+        assert False
 
     def update_player_summary_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)
