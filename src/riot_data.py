@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+import logging
 import sys
 import argparse
 import datetime
@@ -234,14 +235,18 @@ class MatchReference(MatchBase):
     def __init__(self, data):
         super(MatchReference, self).__init__(data["matchId"], data["timestamp"])
 
-        self.champion_id = data["champion"]
-        self.lane = data["lane"]
+        self.full_data = data
         self.platform_id = data["platformId"]
         self.queue = data["queue"]
-        self.role = data["role"]
         self.season = data["season"]
 
-        self.full_data = data
+        try:
+            self.champion_id = data["champion"]
+            self.lane = data["lane"]
+            self.role = data["role"]
+        except KeyError as e:
+            logging.getLogger(__name__).error("Missing info in MatchReference. Missing %s, data is %s", e, data)
+
 
     def is_interesting(self):
         return Season.is_interesting(self.season) and Queue.is_interesting(self.queue)

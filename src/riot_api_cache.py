@@ -331,12 +331,7 @@ class ApiCache(object):
                    self.outcomes.most_common())
 
     def compact(self):
-        # remove any matches from queues we don't care about
-        result = self.matches.remove({"data.queueType": {"$nin": [riot_data.Match.QUEUE_RANKED_5, riot_data.Match.QUEUE_RANKED_SOLO]}})
-        self.logger.info("Result from removing matches from queues we don't care about: %s", result)
-
-        result = self.matches.update(Envelope.query_queued(False), {"$unset": make_unset()}, multi=True)
-        self.logger.info("Result from pruning detail fields: %s", result)
+        pass
 
     def get_matches(self, chronological=False):
         c = self.matches.find(Envelope.query_queued(False)).batch_size(100)
