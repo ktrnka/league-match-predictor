@@ -115,7 +115,7 @@ class ApiCache(object):
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
         
-        self.setup_mongo()
+        self._setup_mongo()
 
     def queue_match(self, match):
         assert isinstance(match, riot_data.MatchReference)
@@ -393,10 +393,10 @@ class ApiCache(object):
 
         return win_stats
 
-    def setup_mongo(self):
-        result = self.players.ensure_index("data.id")
+    def _setup_mongo(self):
+        result = self.players.ensure_index("data.id", unique=True)
         self.logger.info("Player ensure index result: {}".format(result))
-        result = self.matches.ensure_index("data.matchId")
+        result = self.matches.ensure_index("data.matchId", unique=True)
         self.logger.info("Match ensure index result: {}".format(result))
 
 
