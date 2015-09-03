@@ -66,6 +66,7 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
     try:
         matches = list(riot_connection.get_match_history(player.id))
         for match in matches:
+            # if it's the right queue/season then try to queue it
             if match.is_interesting() and riot_cache.queue_match(match):
                 queued_counts["match"] += 1
 
@@ -104,8 +105,6 @@ def update_match_histories(riot_cache, riot_connection, queued_counts, min_playe
 def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
     logger = logging.getLogger(__name__)
 
-    raise DevReminderError("Refactor update_matches to fetch some matches and just queue some new players")
-
     max_matches = min(min_matches * 3, max(min_matches, queued_counts["match"] * 2))
     logger.info("Fetching queued matches, up to %d", max_matches)
 
@@ -135,12 +134,11 @@ def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
             if e.response.status_code == 404:
                 riot_cache.remove_match(match_id)
 
+
     logger.info("Outcomes from fetching queued matches: %s", outcomes.most_common())
 
 
-def get_recrawl_date(matches, max_matches=15):
-    raise DevReminderError("Update get_recrawl_date for larger number of matches in match-list")
-
+def get_recrawl_date(matches, max_matches=20):
     date_format = "%Y-%m-%d %H:%M:%S"
 
     dates = [match.get_creation_datetime() for match in matches]
