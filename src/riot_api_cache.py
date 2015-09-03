@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 import collections
 from datetime import datetime, timedelta
+import time
 import logging
 import sys
 import argparse
@@ -8,6 +9,7 @@ import functools32
 
 import pymongo
 import pymongo.errors
+import requests
 import riot_api
 
 import riot_data
@@ -341,7 +343,7 @@ class ApiCache(object):
         pass
 
     def get_matches(self, chronological=False):
-        c = self.matches.find(Envelope.query_queued(False)).batch_size(100)
+        c = self.matches.find({}).batch_size(100)
         if chronological:
             c = c.sort("data.matchId", pymongo.ASCENDING)
         for match_data in c:
@@ -422,8 +424,11 @@ class MemoizeCache(ApiCache):
 
         # cached computation like champion damage breakdowns
         self.__compute_mongo_client = pymongo.MongoClient(config.get("mongo_local", "match_uri"))
-        self.__compute_mongo_db = self.__matches_mongo_client.get_default_database()
-        self.compute_collection = self.__matches_mongo_db["computed_values"]
+        self.__compute_mongo_db = self.__compute_mongo_client.get_default_database()
+        self.compute_collection = self.__compute_mongo_db["computed_values"]
+
+        self.heartbeat_logger = logging.getLogger("MemoizeCache.heartbeat")
+        self.heartbeat_logger.addFilter(utilities.ThrottledFilter(delay_seconds=10))
 
 
     def get_ranked_stats(self, player_id):
@@ -460,29 +465,43 @@ class MemoizeCache(ApiCache):
 
         return None
 
-    def load(self, remote_cache):
+    def load(self, remote_cache, stats_expiry_days=7):
         assert isinstance(remote_cache, ApiCache)
 
-        self.logger.info("Loading summoners from remote cache into local and fetching ranked stats")
+        hit_rate = collections.Counter()
+
+        stats_min_date = 1000. * (time.time() - timedelta(stats_expiry_days).total_seconds())
+
+        self.logger.info("Loading summoners from remote cache into local and fetching ranked stats with limit date {}".format(int(stats_min_date)))
+        total_players = remote_cache.players.find({}).count()
+        start_time = time.time()
         for i, player in enumerate(remote_cache.get_players()):
             self.queue_player(player)
 
-            if not self.players.find(Envelope.query_data({"id": player.id})):
-                try:
+            try:
+                # query for this id and if stats modify is greater than value (fails if not present)
+                if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
                     self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
-                except riot_api.SummonerNotFoundError:
-                    pass
+                    hit_rate["hit"] += 1
+                else:
+                    hit_rate["cached"] += 1
+            except riot_api.SummonerNotFoundError:
+                hit_rate["miss"] += 1
+            except requests.exceptions.HTTPError:
+                self.logger.warning("Mucho errors, sleeping 10 sec")
+                time.sleep(10)
 
-            if i % 1000 == 0:
-                self.logger.info("Loaded {:,} players into local cache".format(i + 1))
+            elapsed_time = time.time() - start_time
+            completed = float(i + 1) / total_players
+            expected_duration = elapsed_time / completed
+            self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(expected_duration / 60)))
 
         self.logger.info("Loading matches from remote cache into local and fetching match details")
         for i, match_ref in enumerate(remote_cache.get_matches()):
             match = self.riot_connection.get_match(match_ref.id)
             self.update_match(match)
-            if i % 1000 == 0:
-                self.logger.info("Loaded {:,} matches into local cache".format(i + 1))
 
+            self.heartbeat_logger.info("Loaded {:,} matches into local cache".format(i + 1))
 
 def parse_args():
     parser = argparse.ArgumentParser()

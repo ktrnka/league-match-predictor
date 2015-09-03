@@ -53,6 +53,10 @@ class DevReminderError(BaseException):
     def __init__(self, message):
         super(DevReminderError, self).__init__(message)
 
+def summarize_counts(counter):
+    total = sum(counter.itervalues())
+    return ", ".join("{}: {:.2f}% ({})".format(k, 100. * v / total, v) for k, v in counter.iteritems())
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
