@@ -1,4 +1,6 @@
 from __future__ import unicode_literals
+import io
+import pprint
 import sys
 import argparse
 import pandas
@@ -15,6 +17,7 @@ import matplotlib.pyplot as plt
 import sklearn.decomposition
 import sklearn.preprocessing
 from operator import itemgetter
+import collections
 
 N_JOBS = 3
 
@@ -91,6 +94,7 @@ def parse_args():
     parser.add_argument("--elastic", default=False, action="store_true", help="Experiments with elastic nets")
     parser.add_argument("--learning-curve", default=None, help="Generate a learning curve and save to file")
     parser.add_argument("--decision-tree", default=False, action="store_true", help="Experiments with decision trees")
+    parser.add_argument("--predictability", default=False, action="store_true", help="Tests to analyse which kinds of matches are most predictable")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -111,13 +115,90 @@ def random_forest(X, y, data, split_iterator):
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
 
 
+def predictability_tests(X, y, preprocessed_data, original_data):
+    forest = sklearn.ensemble.RandomForestClassifier(n_estimators=100, min_samples_split=50, min_samples_leaf=5)
+
+    print "Original data cols: {}".format(", ".join(sorted(original_data.columns)))
+
+    correlations = collections.defaultdict(collections.Counter)
+    accuracies = []
+
+    for train_indices, test_indices in sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, test_size=0.1, random_state=4):
+        forest.fit(X[train_indices, :], y[train_indices])
+
+        predictions = forest.predict(X[test_indices, :])
+        accuracy = sklearn.metrics.accuracy_score(y[test_indices], predictions)
+
+        print "Random forest {:.2f}% accuracy in {:,} samples".format(accuracy * 100., len(test_indices))
+        accuracies.append(accuracy)
+
+        for test_index, prediction_index in zip(test_indices, xrange(len(predictions))):
+            # build up a list of correlation keys
+            version = original_data.GameVersion[test_index]
+
+            champs = set()
+            for team in "Blue", "Red":
+                for position in xrange(1, 6):
+                    champs.add(original_data["{}_{}_Champ".format(team, position)][test_index])
+
+            # count up
+            prediction_outcome = bool(predictions[prediction_index] == y[test_index])
+
+            correlations["Version {}".format(version)][prediction_outcome] += 1
+            for champ in champs:
+                correlations["Game has {}".format(champ)][prediction_outcome] += 1
+
+            correlations["Blue Tier {} Red Tier {}".format(original_data.Blue_Tier[test_index], original_data.Red_Tier[test_index])][prediction_outcome] += 1
+
+    print "Overall {:.2f}% +/- {:.2f}%".format(100. * numpy.mean(accuracies), 100. * numpy.std(accuracies))
+    print "Predictability by segment"
+    for key in sorted(correlations.iterkeys()):
+        # print correlations[key].keys()
+        num_correct = correlations[key][True]
+        num_incorrect = correlations[key][False]
+
+        if num_correct + num_incorrect < 10:
+            continue
+
+        print "\t{:20s}: {:.1f}% accuracy in {:,} samples".format(key, 100. * num_correct / (num_correct + num_incorrect), num_correct + num_incorrect)
+
+    with io.open("predictable_features.csv", "w", encoding="UTF-8") as csv_out:
+        csv_out.write(",".join(["Accuracy of RF model"] + [str(x) for x in accuracies]) + "\n")
+        csv_out.write("Feature,Prediction accuracy if present,Num testing samples")
+
+        for key in sorted(correlations.iterkeys()):
+            # print correlations[key].keys()
+            num_correct = correlations[key][True]
+            num_incorrect = correlations[key][False]
+
+            if num_correct + num_incorrect < 10:
+                continue
+
+            csv_out.write("{},{}%,{}\n".format(key, 100. * num_correct / (num_correct + num_incorrect), num_correct + num_incorrect))
+
+
+
 def decision_tree(X, y, data, split_iterator):
-    tree = sklearn.tree.DecisionTreeClassifier()
+    tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
 
-    scores = sklearn.cross_validation.cross_val_score(tree, X, y, cv=split_iterator)
+    # scores = sklearn.cross_validation.cross_val_score(tree, X, y, cv=split_iterator)
 
-    print "Decision tree: {:.2f}% +/- {:.2f}%".format(100. * scores.mean(), 100. * scores.std())
+    hyperparameter_space = {
+        "max_depth": [5, 10, 20],
+        "min_samples_split": [25, 50, 100],
+        "min_samples_leaf": [5, 10, 50]
+    }
 
+    grid_search = sklearn.grid_search.GridSearchCV(tree, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
+    grid_search.fit(X, y)
+
+    print "Decision tree tuning"
+    print_tuning_scores(grid_search)
+
+    # print "Decision tree: {:.2f}% +/- {:.2f}%".format(100. * scores.mean(), 100. * scores.std())
+
+    # refit for visualization
+    tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
     tree.fit(X, y)
     sklearn.tree.export_graphviz(tree, "decision_tree.dot", feature_names=data.drop("IsBlueWinner", axis=1).columns)
 
@@ -361,8 +442,8 @@ def check_data(X, y):
 def main():
     args = parse_args()
 
-    data = pandas.read_csv(args.input, header=0)
-    data = preprocess_features(data)
+    original_data = pandas.read_csv(args.input, header=0)
+    data = preprocess_features(original_data)
 
     X, y = dataframe_to_ndarrays(data)
     check_data(X, y)
@@ -377,6 +458,9 @@ def main():
 
     if args.forest:
         random_forest(X, y, data, cross_val_splits)
+
+    if args.predictability:
+        predictability_tests(X, y, data, original_data)
 
     if args.logistic:
         logistic_regression(X, y, data, cross_val_splits)
