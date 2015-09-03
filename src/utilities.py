@@ -26,6 +26,28 @@ class ThrottledFilter(logging.Filter):
         return False
 
 
+class RequestTimer(object):
+    """Simple tracker to help test the time of network requests"""
+    def __init__(self):
+        self.elapsed_time = 0
+        self.num_requests = 0
+
+        self.__start_time = None
+
+    def start(self):
+        self.__start_time = time.time()
+
+    def stop(self):
+        self.elapsed_time += time.time() - self.__start_time
+        self.num_requests += 1
+
+    def get_requests_per_second(self):
+        return self.num_requests / float(self.elapsed_time)
+
+    def get_seconds_per_request(self):
+        return self.elapsed_time / float(self.num_requests)
+
+
 class DevReminderError(BaseException):
     """Error to remind me to implement something"""
     def __init__(self, message):

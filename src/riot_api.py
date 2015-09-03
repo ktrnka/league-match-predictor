@@ -47,6 +47,7 @@ class RiotService(object):
 
         self.num_requests = 0
         self.request_types = collections.Counter()
+        self.request_timer = utilities.RequestTimer()
 
         self.summoner_spells = None
 
@@ -60,10 +61,13 @@ class RiotService(object):
 
     def request(self, endpoint, base_url=None, tries_left=1, additional_params=None, suppress_codes={}):
         params = _merge_params(self.params, additional_params)
+
+        self.request_timer.start()
         self.throttle()
         full_url = urlparse.urljoin(base_url or self.base_url, endpoint)
         response = requests.get(full_url, params=params)
         self.num_requests += 1
+        self.request_timer.stop()
 
         # don't give messages for 200, 429, and any special ones that are expected like 404 sometimes
         if response.status_code != HTTP_OK and response.status_code not in suppress_codes and response.status_code != RATE_LIMIT_ERROR:
@@ -78,10 +82,12 @@ class RiotService(object):
             if response.status_code != RATE_LIMIT_ERROR:
                 break
 
+            self.request_timer.start()
             self.throttle(exponential_level)
             self.logger.warning("Waiting for %.1f seconds", self.scale_delay(exponential_level))
             response = requests.get(full_url, params=params)
             self.num_requests += 1
+            self.request_timer.stop()
 
         response.raise_for_status()
         data = response.json()
@@ -133,7 +139,7 @@ class RiotService(object):
 
     def heartbeat(self):
         request_types = ", ".join("{}: {:,}".format(k, v) for k, v in self.request_types.most_common())
-        self.heartbeat_logger.info("Made %d requests from the following high-level types: %s", self.num_requests, request_types)
+        self.heartbeat_logger.info("Made %d requests at %.1f req/s: %s", self.num_requests, self.request_timer.get_requests_per_second(), request_types)
 
     def throttle(self, delay_level=0):
         scaled_delay_seconds = self.scale_delay(delay_level)
