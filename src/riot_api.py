@@ -220,12 +220,16 @@ class RiotService(object):
         self.request_types["featured"] += 1
         return data["gameList"], data["clientRefreshInterval"]
 
-    def get_match_history(self, summoner_id):
+    def get_match_history(self, summoner_id, recrawl_start_time=None):
         if not summoner_id or not isinstance(summoner_id, int):
             raise InvalidIdError("summoner_id must be a valid int")
 
         try:
-            data = self.request("v2.2/matchlist/by-summoner/{}".format(summoner_id))
+            additional_args = None
+            if recrawl_start_time:
+                additional_args = {"beginTime": recrawl_start_time}
+                self.logger.info("Setting recrawl start time to {}".format(recrawl_start_time))
+            data = self.request("v2.2/matchlist/by-summoner/{}".format(summoner_id), additional_params=additional_args)
             self.request_types["matchlist"] += 1
 
             if data:

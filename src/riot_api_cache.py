@@ -35,10 +35,12 @@ class Envelope(object):
     """
     Wraps API data with metadata such as whether it's a queued identifier, when it was last updated, and so on.
     """
-    def __init__(self, data, is_queued, last_updated):
+    def __init__(self, data, is_queued, last_updated, recrawl_start_time):
         self.data = data
         self.is_queued = is_queued
         self.last_updated = last_updated
+
+        self.recrawl_start_time = None
 
     @staticmethod
     def wrap(data, is_queued=True):
@@ -46,7 +48,10 @@ class Envelope(object):
 
     @staticmethod
     def unwrap(mongo_object):
-        return Envelope(mongo_object[_ENVELOPE_DATA], mongo_object[_ENVELOPE_IS_QUEUED], datetime.strptime(mongo_object[_ENVELOPE_UPDATED_DATE], _MONGO_DATE_FORMAT))
+        return Envelope(mongo_object[_ENVELOPE_DATA],
+                        mongo_object[_ENVELOPE_IS_QUEUED],
+                        datetime.strptime(mongo_object[_ENVELOPE_UPDATED_DATE], _MONGO_DATE_FORMAT),
+                        recrawl_start_time=mongo_object.get("recrawl_start_time", None))
 
     @staticmethod
     def query_queued(is_queued):
@@ -152,7 +157,7 @@ class ApiCache(object):
             raise ValueError("Type not recognized: {}".format(type))
 
         for item in c.limit(max_records):
-            yield riot_data.Summoner(Envelope.unwrap(item))
+            yield riot_data.Summoner(Envelope.unwrap(item).data)
 
     def get_queued_matches(self, max_records):
         # ranked 5v5
@@ -175,14 +180,16 @@ class ApiCache(object):
         players = []
         previous_max_records = max_records
         for player_data in self.players.find({"recrawl_at": None}).limit(max_records):
-            players.append(riot_data.Summoner(Envelope.unwrap(player_data).data))
+            envelope = Envelope.unwrap(player_data)
+            players.append((envelope, riot_data.Summoner(envelope.data)))
             max_records -= 1
         self.logger.info("%d players without recrawl specified", previous_max_records - max_records)
 
         if max_records > 0:
             previous_max_records = max_records
             for player_data in self.players.find({"recrawl_at": {"$ne": None}}).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
-                players.append(riot_data.Summoner(Envelope.unwrap(player_data).data))
+                envelope = Envelope.unwrap(player_data)
+                players.append((envelope, riot_data.Summoner(envelope.data)))
                 max_records -= 1
             self.logger.info("%d players selected from earliest recrawl dates", previous_max_records - max_records)
 
@@ -276,8 +283,8 @@ class ApiCache(object):
                 self.logger.error("Failed to reconnect, giving up and setting empty stats")
                 return riot_data.PlayerStats.make_blank()
 
-    def update_match_history_refresh(self, player, recrawl_date):
-        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
+    def update_match_history_refresh(self, player, recrawl_date, last_match_millis):
+        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date, "recrawl_begin_time": last_match_millis + 1}})
         self.logger.debug("Updated %d match hist refresh for id %d", result["nModified"], player.id)
 
     def update_match(self, match):

@@ -53,18 +53,18 @@ def update_summoner_names(riot_cache, riot_connection, queued_counts, min_player
     max_players = max(min_players, queued_counts["player"] * 2) * 40
     logger.info("Fetching summoner names, up to %d", max_players)
 
-    ids = []
+    players = []
     for player in riot_cache.get_queued_players(max_players):
-        ids.append(player["data"]["id"])
+        players.append(player)
 
-    for player_ids in chunks(ids, chunk_size):
-        players = riot_connection.get_summoners(ids=player_ids)
+    for player_chunk in chunks(players, chunk_size):
+        players = riot_connection.get_summoners(ids=[p.id for p in player_chunk])
         riot_cache.update_player_names(players)
 
 
-def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
+def refresh_match_history(riot_connection, riot_cache, queued_counts, player, recrawl_start_time):
     try:
-        matches = list(riot_connection.get_match_history(player.id))
+        matches = list(riot_connection.get_match_history(player.id, recrawl_start_time))
         for match in matches:
             # if it's the right queue/season then try to queue it
             if match.is_interesting() and riot_cache.queue_match(match):
@@ -86,17 +86,17 @@ def update_match_histories(riot_cache, riot_connection, queued_counts, min_playe
 
     refresh_outcomes = collections.Counter()
 
-    for player in riot_cache.get_players_recrawl(max_players):
+    for envelope, player in riot_cache.get_players_recrawl(max_players):
         assert isinstance(player, riot_data.Summoner)
 
-        matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player)
+        matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player, envelope.recrawl_start_time)
 
         # set the recrawl date
         if matches:
-            riot_cache.update_match_history_refresh(player, get_recrawl_date(matches))
+            riot_cache.update_match_history_refresh(player, get_recrawl_date(matches), max(m.timestamp for m in matches))
             refresh_outcomes["matches found, set recrawl"] += 1
         else:
-            riot_cache.update_match_history_refresh(player, get_recrawl_delay(7))
+            riot_cache.update_match_history_refresh(player, get_recrawl_delay(7), 0)
             refresh_outcomes["matches not found, set 7-day recrawl"] += 1
 
     logger.info("Outcomes from refreshing summoners: {}".format(sorted(refresh_outcomes.items())))
