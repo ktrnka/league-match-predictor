@@ -219,18 +219,24 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    riot_cache = riot_api_cache.ApiCache(config)
     riot_connection = riot_api.RiotService.from_config(config)
+
+    remote_cache = riot_api_cache.ApiCache(config)
+    local_cache = riot_api_cache.MemoizeCache(config, riot_connection)
+
+    local_cache.load(remote_cache)
+
+    return
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
-    champion_damage_types = riot_cache.compute_champion_damage_types()
-    agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
+    champion_damage_types = local_cache.compute_champion_damage_types()
+    agg_stats, agg_champion_stats = local_cache.aggregate_champion_stats()
 
     logger.info("Computing champion damage and aggregate stats took %.1f sec", time.time() - previous_time)
 
     with io.open(args.output_csv, "w") as csv_out:
-        generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out)
+        generate_dataset(riot_connection, remote_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out)
 
 
 

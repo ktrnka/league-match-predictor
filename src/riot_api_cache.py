@@ -97,16 +97,16 @@ class ComputeResultEnvelope(object):
 
 
 class ApiCache(object):
-    def __init__(self, config):
+    def __init__(self, config, config_section="mongo"):
         self.outcomes = collections.Counter()
 
         # matches
-        self.__matches_mongo_client = pymongo.MongoClient(config.get("mongo", "match_uri"))
+        self.__matches_mongo_client = pymongo.MongoClient(config.get(config_section, "match_uri"))
         self.__matches_mongo_db = self.__matches_mongo_client.get_default_database()
         self.matches = self.__matches_mongo_db[MATCH_COLLECTION]
 
         # summoners
-        self.__summoners_mongo_client = pymongo.MongoClient(config.get("mongo", "summoner_uri"))
+        self.__summoners_mongo_client = pymongo.MongoClient(config.get(config_section, "summoner_uri"))
         self.__summoners_mongo_db = self.__summoners_mongo_client.get_default_database()
         self.players = self.__summoners_mongo_db[PLAYER_COLLECTION]
 
@@ -290,9 +290,16 @@ class ApiCache(object):
         self.logger.debug("Updated %d match hist refresh for id %d", result["nModified"], player.id)
 
     def update_match(self, match):
+        """Update a match, overwriting all existing fields"""
         self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.wrap(match, False))
 
+    def add_match(self, match):
+        """Add a match to the database, will error if duplicate"""
+        assert isinstance(match, riot_data.Match)
+        self.matches.insert_one(Envelope.wrap(match, False))
+
     def dequeue_match(self, match):
+        """Update the match queued status to false"""
         self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.set_queued(False))
 
     def remove_match(self, match_id):
@@ -336,7 +343,7 @@ class ApiCache(object):
     def get_matches(self, chronological=False):
         c = self.matches.find(Envelope.query_queued(False)).batch_size(100)
         if chronological:
-            c = c.sort("data.matchCreation", pymongo.ASCENDING)
+            c = c.sort("data.matchId", pymongo.ASCENDING)
         for match_data in c:
             yield riot_data.Match(match_data["data"])
 
@@ -399,13 +406,25 @@ class ApiCache(object):
         result = self.matches.ensure_index("data.matchId", unique=True)
         self.logger.info("Match ensure index result: {}".format(result))
 
+    def get_players(self):
+        """Get all player objects in database, parsed"""
+        for player_data in self.players.find({}):
+            yield riot_data.Summoner(Envelope.unwrap(player_data).data)
+
 
 class MemoizeCache(ApiCache):
     def __init__(self, config, riot_connection):
-        super(MemoizeCache, self).__init__(config)
+        super(MemoizeCache, self).__init__(config, config_section="mongo_local")
 
         assert isinstance(riot_connection, riot_api.RiotService)
         self.riot_connection = riot_connection
+        self.logger = logging.getLogger("MemoizeCache")
+
+        # cached computation like champion damage breakdowns
+        self.__compute_mongo_client = pymongo.MongoClient(config.get("mongo_local", "match_uri"))
+        self.__compute_mongo_db = self.__matches_mongo_client.get_default_database()
+        self.compute_collection = self.__matches_mongo_db["computed_values"]
+
 
     def get_ranked_stats(self, player_id):
         """Look up the player's ranked stats, preferring mongodb cache over Riot API"""
@@ -440,6 +459,29 @@ class MemoizeCache(ApiCache):
             return match
 
         return None
+
+    def load(self, remote_cache):
+        assert isinstance(remote_cache, ApiCache)
+
+        self.logger.info("Loading summoners from remote cache into local and fetching ranked stats")
+        for i, player in enumerate(remote_cache.get_players()):
+            self.queue_player(player)
+
+            if not self.players.find(Envelope.query_data({"id": player.id})):
+                try:
+                    self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
+                except riot_api.SummonerNotFoundError:
+                    pass
+
+            if i % 1000 == 0:
+                self.logger.info("Loaded {:,} players into local cache".format(i + 1))
+
+        self.logger.info("Loading matches from remote cache into local and fetching match details")
+        for i, match_ref in enumerate(remote_cache.get_matches()):
+            match = self.riot_connection.get_match(match_ref.id)
+            self.update_match(match)
+            if i % 1000 == 0:
+                self.logger.info("Loaded {:,} matches into local cache".format(i + 1))
 
 
 def parse_args():
