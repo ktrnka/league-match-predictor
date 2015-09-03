@@ -43,7 +43,7 @@ class RiotService(object):
         self.delay_seconds = delay_seconds * 1.1
         self.logger = logging.getLogger("RiotService")
         self.heartbeat_logger = logging.getLogger("RiotService.heartbeat")
-        self.heartbeat_logger.addFilter(utilities.ThrottledFilter())
+        self.heartbeat_logger.addFilter(utilities.ThrottledFilter(delay_seconds=5))
 
         self.num_requests = 0
         self.request_types = collections.Counter()

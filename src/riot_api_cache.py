@@ -410,7 +410,7 @@ class ApiCache(object):
 
     def get_players(self):
         """Get all player objects in database, parsed"""
-        for player_data in self.players.find({}):
+        for player_data in self.players.find({}).batch_size(500):
             yield riot_data.Summoner(Envelope.unwrap(player_data).data)
 
 

@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import logging
+from operator import itemgetter
 import sys
 import argparse
 import time
@@ -55,7 +56,7 @@ class DevReminderError(BaseException):
 
 def summarize_counts(counter):
     total = sum(counter.itervalues())
-    return ", ".join("{}: {:.2f}% ({})".format(k, 100. * v / total, v) for k, v in counter.iteritems())
+    return ", ".join("{}: {:.1f}% ({:,})".format(k, 100. * v / total, v) for k, v in sorted(counter.iteritems(), key=itemgetter(1), reverse=True))
 
 
 def parse_args():
