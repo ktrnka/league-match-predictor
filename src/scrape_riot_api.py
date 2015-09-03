@@ -54,7 +54,7 @@ def update_summoner_names(riot_cache, riot_connection, queued_counts, min_player
     logger.info("Fetching summoner names, up to %d", max_players)
 
     ids = []
-    for player in riot_cache.get_queued_players(riot_cache.players, max_players):
+    for player in riot_cache.get_queued_players(max_players):
         ids.append(player["data"]["id"])
 
     for player_ids in chunks(ids, chunk_size):
