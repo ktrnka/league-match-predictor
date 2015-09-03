@@ -19,8 +19,8 @@ class ThrottledFilter(logging.Filter):
         return super(ThrottledFilter, self).filter(record) and self._filter(record)
 
     def _filter(self, record):
-        if not self.last_message or (time.clock() - self.last_message) > self.delay:
-            self.last_message = time.clock()
+        if not self.last_message or (time.time() - self.last_message) > self.delay:
+            self.last_message = time.time()
             return True
 
         return False
