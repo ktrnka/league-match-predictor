@@ -232,7 +232,7 @@ class RiotService(object):
             data = self.request("v2.2/matchlist/by-summoner/{}".format(summoner_id), additional_params=additional_args)
             self.request_types["matchlist"] += 1
 
-            if data:
+            if data and data["totalGames"] > 0:
                 for match in data["matches"]:
                     yield riot_data.MatchReference(match)
         except requests.HTTPError as exc:
