@@ -49,6 +49,8 @@ class RiotService(object):
         self.request_types = collections.Counter()
         self.request_timer = utilities.RequestTimer()
 
+        self.requests_session = requests.Session()
+
         self.summoner_spells = None
 
     @staticmethod
@@ -65,7 +67,7 @@ class RiotService(object):
         self.request_timer.start()
         self.throttle()
         full_url = urlparse.urljoin(base_url or self.base_url, endpoint)
-        response = requests.get(full_url, params=params)
+        response = self.requests_session.get(full_url, params=params)
         self.num_requests += 1
         self.request_timer.stop()
 
@@ -85,7 +87,7 @@ class RiotService(object):
             self.request_timer.start()
             self.throttle(exponential_level)
             self.logger.warning("Waiting for %.1f seconds", self.scale_delay(exponential_level))
-            response = requests.get(full_url, params=params)
+            response = self.requests_session.get(full_url, params=params)
             self.num_requests += 1
             self.request_timer.stop()
 
