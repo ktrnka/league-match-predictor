@@ -232,11 +232,11 @@ class ApiCache(object):
             # TODO: Convert this to a clever upsert.
             if self.players.find(Envelope.query_data({"id": player.id})):
                 result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"data.name": player.name}})
-                self.logger.info("Updated player name, result: %s", result)
+                self.logger.debug("Updated player name, result: %s", result)
                 updated_count += 1
             else:
                 result = self.players.insert_one(Envelope.wrap(player.export(), False))
-                self.logger.info("Inserted player and name, result: %s", result)
+                self.logger.debug("Inserted player and name, result: %s", result)
                 new_count += 1
 
         return new_count, updated_count
