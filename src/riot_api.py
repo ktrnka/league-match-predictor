@@ -47,6 +47,7 @@ class RiotService(object):
 
         self.num_requests = 0
         self.request_types = collections.Counter()
+        self.request_timer = utilities.RequestTimer()
 
         self.summoner_spells = None
 
@@ -60,10 +61,13 @@ class RiotService(object):
 
     def request(self, endpoint, base_url=None, tries_left=1, additional_params=None, suppress_codes={}):
         params = _merge_params(self.params, additional_params)
+
+        self.request_timer.start()
         self.throttle()
         full_url = urlparse.urljoin(base_url or self.base_url, endpoint)
         response = requests.get(full_url, params=params)
         self.num_requests += 1
+        self.request_timer.stop()
 
         # don't give messages for 200, 429, and any special ones that are expected like 404 sometimes
         if response.status_code != HTTP_OK and response.status_code not in suppress_codes and response.status_code != RATE_LIMIT_ERROR:
@@ -78,10 +82,12 @@ class RiotService(object):
             if response.status_code != RATE_LIMIT_ERROR:
                 break
 
+            self.request_timer.start()
             self.throttle(exponential_level)
             self.logger.warning("Waiting for %.1f seconds", self.scale_delay(exponential_level))
             response = requests.get(full_url, params=params)
             self.num_requests += 1
+            self.request_timer.stop()
 
         response.raise_for_status()
         data = response.json()
@@ -133,7 +139,7 @@ class RiotService(object):
 
     def heartbeat(self):
         request_types = ", ".join("{}: {:,}".format(k, v) for k, v in self.request_types.most_common())
-        self.heartbeat_logger.info("Made %d requests from the following high-level types: %s", self.num_requests, request_types)
+        self.heartbeat_logger.info("Made %d requests at %.1f req/s: %s", self.num_requests, self.request_timer.get_requests_per_second(), request_types)
 
     def throttle(self, delay_level=0):
         scaled_delay_seconds = self.scale_delay(delay_level)
@@ -211,22 +217,30 @@ class RiotService(object):
 
         return [riot_data.Summoner(s) for s in data.itervalues()]
 
+    def get_leagues(self, player_ids):
+        raise utilities.DevReminderError("set_league not implemented yet")
+
+
     def get_featured_matches(self):
         data = self.request("featured", self.observer_base_url)
         self.request_types["featured"] += 1
         return data["gameList"], data["clientRefreshInterval"]
 
-    def get_match_history(self, summoner_id):
+    def get_match_history(self, summoner_id, recrawl_start_time=None):
         if not summoner_id or not isinstance(summoner_id, int):
             raise InvalidIdError("summoner_id must be a valid int")
 
         try:
-            data = self.request("v2.2/matchhistory/{}".format(summoner_id), additional_params={"endIndex": 15})
-            self.request_types["matchhistory"] += 1
+            additional_args = None
+            if recrawl_start_time:
+                additional_args = {"beginTime": recrawl_start_time}
+                self.logger.info("Setting recrawl start time to {}".format(recrawl_start_time))
+            data = self.request("v2.2/matchlist/by-summoner/{}".format(summoner_id), additional_params=additional_args)
+            self.request_types["matchlist"] += 1
 
-            if data:
+            if data and data["totalGames"] > 0:
                 for match in data["matches"]:
-                    yield riot_data.Match(match)
+                    yield riot_data.MatchReference(match)
         except requests.HTTPError as exc:
             self.logger.exception("Ignoring error in match history")
 

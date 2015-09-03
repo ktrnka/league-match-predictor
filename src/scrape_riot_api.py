@@ -10,6 +10,7 @@ import riot_api
 import riot_api_cache
 import riot_data
 import requests.exceptions
+from utilities import DevReminderError
 
 EPOCH = datetime.datetime.utcfromtimestamp(0)
 
@@ -29,7 +30,7 @@ def chunks(l, n):
 
 def queue_featured(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
-    logger.info("Fetching featured matches and queueing matches and players")
+    logger.info("Fetching featured matches and queueing players in them")
 
     summoner_names = []
 
@@ -37,56 +38,36 @@ def queue_featured(riot_cache, riot_connection, queued_counts):
     for game_data in games:
         match = riot_data.Match.from_featured(game_data)
 
-        if riot_cache.queue_match(match):
-            queued_counts["match"] += 1
-
         for player in match.players:
             summoner_names.append(player.name)
 
     for player_names in chunks(summoner_names, 40):
         players = riot_connection.get_summoners(names=player_names)
-        riot_cache.update_players(players)
+        new_count, updated_count = riot_cache.update_player_names(players)
+        queued_counts["player"] += new_count
 
 
-def update_summoner_names(riot_cache, riot_connection, queued_counts, min_players=100):
+def update_summoner_names(riot_cache, riot_connection, queued_counts, min_players=100, chunk_size=40):
     logger = logging.getLogger(__name__)
 
     max_players = max(min_players, queued_counts["player"] * 2) * 40
     logger.info("Fetching summoner names, up to %d", max_players)
 
-    ids = []
-    for player in riot_cache.get_queued(riot_cache.players, max_players):
-        ids.append(player["data"]["id"])
+    players = []
+    for player in riot_cache.get_queued_players(max_players):
+        players.append(player)
 
-    for player_ids in chunks(ids, 40):
-        players = riot_connection.get_summoners(ids=player_ids)
-        riot_cache.update_players(players)
+    for player_chunk in chunks(players, chunk_size):
+        players = riot_connection.get_summoners(ids=[p.id for p in player_chunk])
+        riot_cache.update_player_names(players)
 
 
-def refresh_ranked_stats(riot_connection, riot_cache, player, outcome_counter):
+def refresh_match_history(riot_connection, riot_cache, queued_counts, player, recrawl_start_time):
     try:
-        player_stats = riot_connection.get_summoner_ranked_stats(player.id)
-        riot_cache.update_player_stats(player.id, player_stats)
-        outcome_counter["update ranked success"] += 1
-    except riot_api.SummonerNotFoundError:
-        riot_cache.update_player_stats(player.id, {})
-        outcome_counter["update ranked failure"] += 1
-
-
-def refresh_summary_stats(riot_connection, riot_cache, player, outcome_counter):
-    try:
-        player_stats = riot_connection.get_summoner_summary_stats(player.id)
-        riot_cache.update_player_summary_stats(player.id, player_stats)
-        outcome_counter["update summary success"] += 1
-    except riot_api.SummonerNotFoundError:
-        outcome_counter["update summary failure"] += 1
-
-
-def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
-    try:
-        matches = list(riot_connection.get_match_history(player.id))
+        matches = list(riot_connection.get_match_history(player.id, recrawl_start_time))
         for match in matches:
-            if riot_cache.queue_match(match):
+            # if it's the right queue/season then try to queue it
+            if match.is_interesting() and riot_cache.queue_match(match):
                 queued_counts["match"] += 1
 
         return matches
@@ -97,36 +78,25 @@ def refresh_match_history(riot_connection, riot_cache, queued_counts, player):
     return None
 
 
-def update_summoners(riot_cache, riot_connection, queued_counts, min_players=200):
+def update_match_histories(riot_cache, riot_connection, queued_counts, min_players=200):
     logger = logging.getLogger(__name__)
 
     max_players = max(min_players, queued_counts["player"] * 2)
-    logger.info("Updating ranked/summary stats and match history, up to %d players", max_players)
+    logger.info("Updating match history, up to %d players", max_players)
 
     refresh_outcomes = collections.Counter()
 
-    for player in riot_cache.get_players_recrawl(max_players):
+    for envelope, player in riot_cache.get_players_recrawl(max_players):
         assert isinstance(player, riot_data.Summoner)
-        if not isinstance(player.id, int):
-            # Error was triggered by a string ID which shouldn't be possible
-            logger.error("Player with non-int ID: {}, type={}".format(player, type(player.id)))
-            continue
 
-        # refresh ranked stats
-        # refresh_ranked_stats(riot_connection, riot_cache, player, refresh_outcomes)
-
-        # refresh summary stats
-        # refresh_summary_stats(riot_connection, riot_cache, player, refresh_outcomes)
-
-        # refresh match history
-        matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player)
+        matches = refresh_match_history(riot_connection, riot_cache, queued_counts, player, envelope.recrawl_start_time)
 
         # set the recrawl date
         if matches:
-            riot_cache.update_match_history_refresh(player, get_recrawl_date(matches))
+            riot_cache.update_match_history_refresh(player, get_recrawl_date(matches), max(m.timestamp for m in matches))
             refresh_outcomes["matches found, set recrawl"] += 1
         else:
-            riot_cache.update_match_history_refresh(player, get_recrawl_delay(7))
+            riot_cache.update_match_history_refresh(player, get_recrawl_delay(7), 0)
             refresh_outcomes["matches not found, set 7-day recrawl"] += 1
 
     logger.info("Outcomes from refreshing summoners: {}".format(sorted(refresh_outcomes.items())))
@@ -145,7 +115,8 @@ def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
 
         try:
             match_info = riot_connection.get_match(match_id)
-            riot_cache.update_match(match_info)
+
+            riot_cache.dequeue_match(match_info)
 
             try:
                 parsed_match = riot_data.Match(match_info)
@@ -163,10 +134,11 @@ def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
             if e.response.status_code == 404:
                 riot_cache.remove_match(match_id)
 
+
     logger.info("Outcomes from fetching queued matches: %s", outcomes.most_common())
 
 
-def get_recrawl_date(matches, max_matches=15):
+def get_recrawl_date(matches, max_matches=20):
     date_format = "%Y-%m-%d %H:%M:%S"
 
     dates = [match.get_creation_datetime() for match in matches]
@@ -190,13 +162,31 @@ def get_recrawl_delay(num_days):
 def queue_master_plus(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
 
-    added_summoners = 0
-    for summoner in riot_connection.get_master_plus_solo():
-        if riot_cache.queue_player(summoner):
-            added_summoners += 1
+    added_players = 0
+    for player in riot_connection.get_master_plus_solo():
+        if riot_cache.queue_player(player):
+            added_players += 1
             queued_counts["player"] += 1
 
-    logger.info("Queued %d new summoners from crawling masters and challenger", added_summoners)
+    logger.info("Queued %d new summoners from crawling masters and challenger", added_players)
+
+
+def update_summoner_leagues(riot_cache, riot_connection, queued_counts):
+    logger = logging.getLogger(__name__)
+
+    max_players = max(100, queued_counts["player"] * 2) * 40
+    logger.info("Fetching summoner names, up to %d", max_players)
+
+    players = []
+    for player in riot_cache.get_queued_players(max_players, type=riot_api_cache.TYPE_LEAGUE):
+        players.append(player)
+
+    for player_chunk in chunks(players, 10):
+        player_ids = [p.id for p in player_chunk]
+        leagues = riot_connection.get_leagues(player_ids)
+
+        for player, league in zip(player_chunk, leagues):
+            riot_cache.set_league(player, league)
 
 
 def main():
@@ -221,15 +211,20 @@ def main():
     try:
         queued_counts = collections.Counter()
 
+        # extract players from featured matches
+        queue_featured(riot_cache, riot_connection, queued_counts)
+
         # find players from masters and challenger and add them
         queue_master_plus(riot_cache, riot_connection, queued_counts)
+
+        # make sure we have summoner names (for convenience)
         update_summoner_names(riot_cache, riot_connection, queued_counts)
 
-        update_summoners(riot_cache, riot_connection, queued_counts)
-        update_matches(riot_cache, riot_connection, queued_counts)
+        # make sure we have their leagues
+        # update_summoner_leagues(riot_cache, riot_connection, queued_counts)
 
-        # queue up featured matches last because they will automatically fail to get match data for a while
-        queue_featured(riot_cache, riot_connection, queued_counts)
+        update_match_histories(riot_cache, riot_connection, queued_counts)
+        update_matches(riot_cache, riot_connection, queued_counts)
 
         logger.info("Found %d new players, %d new matches", queued_counts["player"], queued_counts["match"])
 

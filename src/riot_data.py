@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+import logging
 import sys
 import argparse
 import datetime
@@ -29,7 +30,6 @@ class Tier(object):
     @staticmethod
     def mean_level(tiers):
         return sum(Tier._indexes[tier] for tier in tiers) / len(tiers)
-
 
 
 class Champion(object):
@@ -104,27 +104,48 @@ class Queue(object):
         42: "RANKED_TEAM_5x5"
     }
 
+    interesting_queues = set(id_to_name.itervalues())
+
     @staticmethod
     def to_name(queue_id):
         assert isinstance(queue_id, int)
 
         return Queue.id_to_name.get(queue_id, unicode(queue_id))
 
-class Match(object):
+    @staticmethod
+    def is_interesting(queue_name):
+        assert isinstance(queue_name, basestring)
+        return queue_name in Queue.interesting_queues
+
+class Season(object):
+    @staticmethod
+    def is_interesting(season_name):
+        assert isinstance(season_name, basestring)
+        return season_name == "SEASON2015"
+
+class MatchBase(object):
+    def __init__(self, match_id, timestamp):
+        self.id = match_id
+        self.timestamp = timestamp
+
+    def get_creation_datetime(self):
+        # The creation time from API is milliseconds since the epoch not seconds
+        return datetime.datetime.fromtimestamp(self.timestamp / 1000.)
+
+
+class Match(MatchBase):
     QUEUE_RANKED_SOLO = "RANKED_SOLO_5x5"
     QUEUE_RANKED_5 = "RANKED_TEAM_5x5"
 
     def __init__(self, data):
-        self.id = data["matchId"]
+        super(Match, self).__init__(data["matchId"], data["matchCreation"])
+
         self.mode = data["matchMode"]
         self.type = data["matchType"]
-        self.creation_time = data["matchCreation"]
         self.duration = data["matchDuration"]
         self.queue_type = data["queueType"]
         self.version = data["matchVersion"]
-
         self.players = list(Participant.parse_participants(data["participants"], data["participantIdentities"]))
-
         self.full_data = data
 
     def get_winning_team_id(self):
@@ -184,11 +205,6 @@ class Match(object):
     def export(self):
         return self.full_data
 
-    def get_creation_datetime(self):
-        # The creation time from API is milliseconds since the epoch not seconds
-        # And it's pacific time not UTC
-        return datetime.datetime.fromtimestamp(self.creation_time / 1000.)
-
     @staticmethod
     def from_featured(data):
         """Parse a partial Match object from a featured match"""
@@ -212,6 +228,34 @@ class Match(object):
         wrapped_data["original_data"] = data
         return Match(wrapped_data)
 
+
+class MatchReference(MatchBase):
+    """Reference to a match without much detailed information"""
+
+    def __init__(self, data):
+        super(MatchReference, self).__init__(data["matchId"], data["timestamp"])
+
+        self.full_data = data
+        self.platform_id = data["platformId"]
+        self.queue = data["queue"]
+        self.season = data["season"]
+
+        try:
+            self.champion_id = data["champion"]
+            self.lane = data["lane"]
+            self.role = data["role"]
+        except KeyError as e:
+            logging.getLogger(__name__).error("Missing info in MatchReference. Missing %s, data is %s", e, data)
+
+
+    def is_interesting(self):
+        return Season.is_interesting(self.season) and Queue.is_interesting(self.queue)
+
+    def get_creation_datetime(self):
+        return datetime.datetime.fromtimestamp(self.timestamp / 1000.)
+
+    def export(self):
+        return self.full_data
 
 def _merge_stats(champion_datas):
     totals = collections.Counter()
@@ -370,5 +414,33 @@ class ChampionStats(object):
             remove_games = 0
 
         return self.played - remove_games
+
+
+class League(object):
+    """Represents someone's league entry"""
+    __DIVISION_ADDS = {"I": 400, "II": 300, "III": 200, "IV": 100, "V": 0}
+
+    def __init__(self, queue, tier, division, points):
+        self.tier = tier
+        self.queue = queue
+        self.division = division
+        self.points = points
+
+    def get_merged_division_points(self):
+        # TODO: This isn't correct for challenger and maybe not master either
+        return self.points + self.__DIVISION_ADDS[self.division]
+
+    @staticmethod
+    def from_response(league_data):
+        for player_team_id, data in league_data.iteritems():
+            entry = League.__find_entry(data["entries"], player_team_id)
+            yield League(data["queue"], data["tier"], entry["division"], entry["lp"])
+
+    @staticmethod
+    def __find_entry(entries, player_team_id):
+        for league_entry in entries:
+            if league_entry["playerOrTeamId"] == player_team_id:
+                return league_entry
+
 
 EMPTY_CHAMPION_STATS = ChampionStats(collections.Counter())

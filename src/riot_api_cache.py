@@ -11,6 +11,7 @@ import pymongo.errors
 import riot_api
 
 import riot_data
+import utilities
 
 
 _ENVELOPE_UPDATED_DATE = "updated"
@@ -27,15 +28,19 @@ MATCH_COLLECTION = "matches"
 
 PLAYER_COLLECTION = "summoners"
 
+TYPE_LEAGUE = "league"
+TYPE_QUEUED = "queued"
 
 class Envelope(object):
     """
     Wraps API data with metadata such as whether it's a queued identifier, when it was last updated, and so on.
     """
-    def __init__(self, data, is_queued, last_updated):
+    def __init__(self, data, is_queued, last_updated, recrawl_start_time):
         self.data = data
         self.is_queued = is_queued
         self.last_updated = last_updated
+
+        self.recrawl_start_time = None
 
     @staticmethod
     def wrap(data, is_queued=True):
@@ -43,7 +48,10 @@ class Envelope(object):
 
     @staticmethod
     def unwrap(mongo_object):
-        return Envelope(mongo_object[_ENVELOPE_DATA], mongo_object[_ENVELOPE_IS_QUEUED], datetime.strptime(mongo_object[_ENVELOPE_UPDATED_DATE], _MONGO_DATE_FORMAT))
+        return Envelope(mongo_object[_ENVELOPE_DATA],
+                        mongo_object[_ENVELOPE_IS_QUEUED],
+                        datetime.strptime(mongo_object[_ENVELOPE_UPDATED_DATE], _MONGO_DATE_FORMAT),
+                        recrawl_start_time=mongo_object.get("recrawl_start_time", None))
 
     @staticmethod
     def query_queued(is_queued):
@@ -52,6 +60,10 @@ class Envelope(object):
     @staticmethod
     def query_data(data_query):
         return {"data.{}".format(k): v for k, v in data_query.iteritems()}
+
+    @staticmethod
+    def set_queued(queued):
+        return {"$set": {_ENVELOPE_IS_QUEUED: queued}}
 
 
 class ComputeResultEnvelope(object):
@@ -102,10 +114,11 @@ class ApiCache(object):
 
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
-
+        
+        self.setup_mongo()
 
     def queue_match(self, match):
-        assert isinstance(match, riot_data.Match)
+        assert isinstance(match, riot_data.MatchReference)
 
         match_data = self.matches.find_one(Envelope.query_data({"matchId": match.id}))
 
@@ -137,9 +150,16 @@ class ApiCache(object):
             self.logger.debug("Already queued player %d", player.id)
             return False
 
-    def get_queued(self, collection, max_records):
-        for item in collection.find(Envelope.query_queued(True)).limit(max_records):
-            yield item
+    def get_queued_players(self, max_records, type=TYPE_QUEUED):
+        if type == TYPE_QUEUED:
+            c = self.players.find(Envelope.query_queued(True))
+        elif type == TYPE_LEAGUE:
+            c = self.players.find(Envelope.query_data({"league": {"$exists": False}}))
+        else:
+            raise ValueError("Type not recognized: {}".format(type))
+
+        for item in c.limit(max_records):
+            yield riot_data.Summoner(Envelope.unwrap(item).data)
 
     def get_queued_matches(self, max_records):
         # ranked 5v5
@@ -162,14 +182,16 @@ class ApiCache(object):
         players = []
         previous_max_records = max_records
         for player_data in self.players.find({"recrawl_at": None}).limit(max_records):
-            players.append(riot_data.Summoner(Envelope.unwrap(player_data).data))
+            envelope = Envelope.unwrap(player_data)
+            players.append((envelope, riot_data.Summoner(envelope.data)))
             max_records -= 1
         self.logger.info("%d players without recrawl specified", previous_max_records - max_records)
 
         if max_records > 0:
             previous_max_records = max_records
             for player_data in self.players.find({"recrawl_at": {"$ne": None}}).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
-                players.append(riot_data.Summoner(Envelope.unwrap(player_data).data))
+                envelope = Envelope.unwrap(player_data)
+                players.append((envelope, riot_data.Summoner(envelope.data)))
                 max_records -= 1
             self.logger.info("%d players selected from earliest recrawl dates", previous_max_records - max_records)
 
@@ -201,11 +223,25 @@ class ApiCache(object):
 
         return player_ids
 
-    def update_players(self, players):
+    def update_player_names(self, players):
+        new_count = 0
+        updated_count = 0
+
         for player in players:
             assert isinstance(player, riot_data.Summoner)
             self.logger.debug("Updating %d -> %s", player.id, player.name)
-            self.players.update(Envelope.query_data({"id": player.id}), Envelope.wrap(player.export(), False))
+
+            # TODO: Convert this to a clever upsert.
+            if self.players.find(Envelope.query_data({"id": player.id})):
+                result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"data.name": player.name}})
+                self.logger.debug("Updated player name, result: %s", result)
+                updated_count += 1
+            else:
+                result = self.players.insert_one(Envelope.wrap(player.export(), False))
+                self.logger.debug("Inserted player and name, result: %s", result)
+                new_count += 1
+
+        return new_count, updated_count
 
     def update_player_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)
@@ -216,6 +252,12 @@ class ApiCache(object):
             self.logger.error("Bad result in setting player stats: %s", result)
         elif result["nModified"] == 0:
             self.outcomes["ranked stats: identical update"] += 1
+
+    def set_league(self, player, league):
+        assert isinstance(player, riot_data.Summoner)
+        assert isinstance(league, riot_data.League)
+
+        raise utilities.DevReminderError("set_league not implemented yet")
 
     def update_player_summary_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)
@@ -243,12 +285,15 @@ class ApiCache(object):
                 self.logger.error("Failed to reconnect, giving up and setting empty stats")
                 return riot_data.PlayerStats.make_blank()
 
-    def update_match_history_refresh(self, player, recrawl_date):
-        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date}})
+    def update_match_history_refresh(self, player, recrawl_date, last_match_millis):
+        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date, "recrawl_begin_time": last_match_millis + 1}})
         self.logger.debug("Updated %d match hist refresh for id %d", result["nModified"], player.id)
 
     def update_match(self, match):
         self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.wrap(match, False))
+
+    def dequeue_match(self, match):
+        self.matches.update(Envelope.query_data({"matchId": match["matchId"]}), Envelope.set_queued(False))
 
     def remove_match(self, match_id):
         result = self.matches.delete_one(Envelope.query_data({"matchId": match_id}))
@@ -286,12 +331,7 @@ class ApiCache(object):
                    self.outcomes.most_common())
 
     def compact(self):
-        # remove any matches from queues we don't care about
-        result = self.matches.remove({"data.queueType": {"$nin": [riot_data.Match.QUEUE_RANKED_5, riot_data.Match.QUEUE_RANKED_SOLO]}})
-        self.logger.info("Result from removing matches from queues we don't care about: %s", result)
-
-        result = self.matches.update(Envelope.query_queued(False), {"$unset": make_unset()}, multi=True)
-        self.logger.info("Result from pruning detail fields: %s", result)
+        pass
 
     def get_matches(self, chronological=False):
         c = self.matches.find(Envelope.query_queued(False)).batch_size(100)
@@ -352,6 +392,12 @@ class ApiCache(object):
             win_stats[key] = riot_data.ChampionStats.from_wins_played(games_won[key], games_played[key])
 
         return win_stats
+
+    def setup_mongo(self):
+        result = self.players.ensure_index("data.id")
+        self.logger.info("Player ensure index result: {}".format(result))
+        result = self.matches.ensure_index("data.matchId")
+        self.logger.info("Match ensure index result: {}".format(result))
 
 
 class MemoizeCache(ApiCache):
