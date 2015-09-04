@@ -346,8 +346,15 @@ class ApiCache(object):
         c = self.matches.find({}).batch_size(100)
         if chronological:
             c = c.sort("data.matchId", pymongo.ASCENDING)
+
         for match_data in c:
             yield riot_data.Match(match_data["data"])
+
+    def get_match_refs(self):
+        c = self.matches.find({}).batch_size(100).sort("data.matchId", pymongo.DESCENDING)
+
+        for match_data in c:
+            yield riot_data.MatchReference(match_data["data"])
 
     def compute_champion_damage_types(self):
         champion_damages = collections.defaultdict(collections.Counter)
@@ -478,32 +485,48 @@ class MemoizeCache(ApiCache):
         timer = utilities.EstCompletionTimer()
         timer.start()
 
-        for i, player in enumerate(remote_cache.get_players()):
-            self.queue_player(player)
+        # for i, player in enumerate(remote_cache.get_players()):
+        #     self.queue_player(player)
+        #
+        #     try:
+        #         # query for this id and if stats modify is greater than value (fails if not present)
+        #         if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
+        #             self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
+        #             hit_rate["hit"] += 1
+        #         else:
+        #             hit_rate["cached"] += 1
+        #     except riot_api.SummonerNotFoundError:
+        #         hit_rate["miss"] += 1
+        #     except requests.exceptions.HTTPError:
+        #         self.logger.warning("Mucho errors, sleeping 10 sec")
+        #         time.sleep(10)
+        #
+        #     timer.update()
+        #
+        #     self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_players) / 60)))
 
-            try:
-                # query for this id and if stats modify is greater than value (fails if not present)
-                if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
-                    self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
+        timer.start()
+        hit_rate.clear()
+        self.logger.info("Loading matches from remote cache into local and fetching match details")
+        total_matches = remote_cache.matches.find({}).count()
+        for i, match_ref in enumerate(remote_cache.get_match_refs()):
+            if not match_ref.is_interesting():
+                hit_rate["skipped"] += 1
+                continue
+
+            if self.players.find(Envelope.query_data({"matchId": match_ref.id})).count() != 0:
+                hit_rate["cached"] += 1
+            else:
+                try:
+                    match = self.riot_connection.get_match(match_ref.id)
+                    self.update_match(match)
                     hit_rate["hit"] += 1
-                else:
-                    hit_rate["cached"] += 1
-            except riot_api.SummonerNotFoundError:
-                hit_rate["miss"] += 1
-            except requests.exceptions.HTTPError:
-                self.logger.warning("Mucho errors, sleeping 10 sec")
-                time.sleep(10)
+                except requests.exceptions.HTTPError:
+                    hit_rate["miss"] += 1
 
             timer.update()
 
-            self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds() / 60)))
-
-        self.logger.info("Loading matches from remote cache into local and fetching match details")
-        for i, match_ref in enumerate(remote_cache.get_matches()):
-            match = self.riot_connection.get_match(match_ref.id)
-            self.update_match(match)
-
-            self.heartbeat_logger.info("Loaded {:,} matches into local cache".format(i + 1))
+            self.heartbeat_logger.info("Loaded {:,} matches into local cache with outcomes {}. Expected completion in {} min".format(i + 1, utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_matches) / 60)))
 
 def parse_args():
     parser = argparse.ArgumentParser()
