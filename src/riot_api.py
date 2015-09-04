@@ -219,8 +219,10 @@ class RiotService(object):
         return [riot_data.Summoner(s) for s in data.itervalues()]
 
     def get_leagues(self, player_ids):
-        raise utilities.DevReminderError("set_league not implemented yet")
-
+        """Get a mapping of player_id -> LeagueEntry"""
+        ids = ",".join(unicode(x) for x in player_ids)
+        data = self.request("v2.5/league/by-summoner/{}/entry".format(ids))
+        return riot_data.LeagueEntry.from_response(data)
 
     def get_featured_matches(self):
         data = self.request("featured", self.observer_base_url)

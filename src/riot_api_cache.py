@@ -261,7 +261,18 @@ class ApiCache(object):
         assert isinstance(player, riot_data.Summoner)
         assert isinstance(league, riot_data.LeagueEntry)
 
-        raise utilities.DevReminderError("set_league not implemented yet")
+        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"data.league": league.to_mongo()}})
+        if result["nModified"] != 1:
+            self.logger.error("Updating %d to %s weird result: %s", player.id, league.to_mongo(), result)
+
+    def get_league(self, player_id):
+        assert isinstance(player_id, int)
+
+        player_data = self.players.find_one(Envelope.query_data({"id": player_id}))
+        if player_data and "league" in player_data["data"]:
+            return riot_data.LeagueEntry.from_mongo(player_data["data"]["league"])
+
+        return None
 
     def update_player_summary_stats(self, player_id, player_stats):
         assert isinstance(player_id, int)

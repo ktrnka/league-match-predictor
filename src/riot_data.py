@@ -448,10 +448,16 @@ class LeagueEntry(object):
         return LeagueEntry(data["tier"], data["queue"], data["division"], data["points"])
 
     @staticmethod
-    def from_response(league_data):
-        for player_team_id, data in league_data.iteritems():
-            entry = LeagueEntry.__find_entry(data["entries"], player_team_id)
-            yield LeagueEntry(data["queue"], data["tier"], entry["division"], entry["lp"])
+    def from_response(league_data, target_queue=Match.QUEUE_RANKED_SOLO):
+        """Extract a dict of id -> LeagueEntry for the target queue"""
+        entries = {}
+        for player_team_id, leagues in league_data.iteritems():
+            for league in leagues:
+                if league["queue"] == target_queue:
+                    entry = LeagueEntry.__find_entry(league["entries"], player_team_id)
+                    entries[player_team_id] = LeagueEntry(league["queue"], league["tier"], entry["division"], entry["lp"])
+
+        return entries
 
     @staticmethod
     def __find_entry(entries, player_team_id):
