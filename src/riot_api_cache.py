@@ -166,7 +166,7 @@ class ApiCache(object):
     def get_queued_matches(self, max_records):
         # ranked 5v5
         previous_max_records = max_records
-        for match_data in self.matches.find({"queued": True, "data.queueType": riot_data.Match.QUEUE_RANKED_5}).limit(max_records):
+        for match_data in self.matches.find({"queued": True, "data.queue": riot_data.Match.QUEUE_RANKED_5}).limit(max_records):
             yield match_data
             max_records -= 1
         self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, riot_data.Match.QUEUE_RANKED_5)
@@ -174,7 +174,7 @@ class ApiCache(object):
         # solo 5v5
         previous_max_records = max_records
         if max_records > 0:
-            for match_data in self.matches.find({"queued": True, "data.queueType": riot_data.Match.QUEUE_RANKED_SOLO}).limit(max_records):
+            for match_data in self.matches.find({"queued": True, "data.queue": riot_data.Match.QUEUE_RANKED_SOLO}).limit(max_records):
                 yield match_data
                 max_records -= 1
         self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, riot_data.Match.QUEUE_RANKED_SOLO)
