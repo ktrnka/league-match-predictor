@@ -245,7 +245,8 @@ class MatchReference(MatchBase):
             self.lane = data["lane"]
             self.role = data["role"]
         except KeyError as e:
-            logging.getLogger(__name__).error("Missing info in MatchReference. Missing %s, data is %s", e, data)
+            if self.is_interesting():
+                logging.getLogger(__name__).warning("Missing info in MatchReference. Missing %s, data is %s", e, data)
 
 
     def is_interesting(self):

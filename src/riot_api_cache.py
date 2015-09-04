@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 import collections
 from datetime import datetime, timedelta
+import pprint
 import time
 import logging
 import sys
@@ -10,6 +11,7 @@ import functools32
 import pymongo
 import pymongo.errors
 import requests
+import requests.exceptions
 import riot_api
 
 import riot_data
@@ -297,7 +299,6 @@ class ApiCache(object):
 
     def add_match(self, match):
         """Add a match to the database, will error if duplicate"""
-        assert isinstance(match, riot_data.Match)
         self.matches.insert_one(Envelope.wrap(match, False))
 
     def dequeue_match(self, match):
@@ -514,19 +515,49 @@ class MemoizeCache(ApiCache):
                 hit_rate["skipped"] += 1
                 continue
 
-            if self.players.find(Envelope.query_data({"matchId": match_ref.id})).count() != 0:
+            if self.matches.find(Envelope.query_data({"matchId": match_ref.id})).count() != 0:
                 hit_rate["cached"] += 1
             else:
                 try:
                     match = self.riot_connection.get_match(match_ref.id)
-                    self.update_match(match)
+
+                    try:
+                        _filter_match_data(match)
+                    except KeyError as e:
+                        self.logger.exception("Missing field {}".format(e.message))
+                    self.add_match(match)
                     hit_rate["hit"] += 1
                 except requests.exceptions.HTTPError:
                     hit_rate["miss"] += 1
+                    self.logger.warning("Match({}) not found, played on {}".format(match_ref.id, match_ref.get_creation_datetime().strftime(_MONGO_DATE_FORMAT)))
 
             timer.update()
 
-            self.heartbeat_logger.info("Loaded {:,} matches into local cache with outcomes {}. Expected completion in {} min".format(i + 1, utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_matches) / 60)))
+            self.heartbeat_logger.info("Processed {:,} matches outcomes {}. Expected completion in {} min".format(i + 1, utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_matches) / 60)))
+
+def _filter_match_data(data):
+    """Remove uninteresting fields from a match dict to save space"""
+    for team in data["teams"]:
+        assert isinstance(team, dict)
+        del team["vilemawKills"]
+        del team["dominionVictoryScore"]
+
+    for participant_identity in data["participantIdentities"]:
+        del participant_identity["player"]["matchHistoryUri"]
+        del participant_identity["player"]["profileIcon"]
+
+    for participant in data["participants"]:
+        if "runes" in participant:
+            del participant["runes"]
+        if "masteries" in participant:
+            del participant["masteries"]
+        del participant["stats"]
+
+        for field in participant["timeline"].keys():
+            if field.endswith("Deltas"):
+                del participant["timeline"][field]
+
+    return data
 
 def parse_args():
     parser = argparse.ArgumentParser()
