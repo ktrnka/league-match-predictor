@@ -495,7 +495,13 @@ class MemoizeCache(ApiCache):
         player_ids = list(player.id for player in self.get_queued_players(-1, TYPE_LEAGUE))
         self.logger.info("Updating league entries for {:,} players".format(len(player_ids)))
         for player_id_chunk in utilities.chunks(player_ids, 10):
-            leagues = self.riot_connection.get_leagues(player_id_chunk)
+            try:
+                leagues = self.riot_connection.get_leagues(player_id_chunk)
+            except requests.exceptions.HTTPError as e:
+                self.logger.warning("Excessive HTTP errors, sleeping 10 sec")
+                time.sleep(10)
+                continue
+
             hit_rate["hit"] += len(leagues)
             hit_rate["miss"] += len(player_id_chunk) - len(leagues)
             for player_id, league_entry in leagues.iteritems():

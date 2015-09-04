@@ -75,8 +75,9 @@ class RiotService(object):
         if response.status_code != HTTP_OK and response.status_code not in suppress_codes and response.status_code != RATE_LIMIT_ERROR:
             self.logger.error("Request %s error code %d", full_url, response.status_code)
 
-        # transient errors like 500 can be tried again
+        # transient errors like 500 can be tried again but tend to repeat error so delay a bit
         if response.status_code in HTTP_TRANSIENT_ERRORS and tries_left > 0:
+            self.throttle(3)
             return self.request(endpoint, base_url, tries_left=tries_left - 1, additional_params=additional_params)
 
         # increase the delay exponentially for rate limit errors
