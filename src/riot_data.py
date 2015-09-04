@@ -455,7 +455,10 @@ class LeagueEntry(object):
             for league in leagues:
                 if league["queue"] == target_queue:
                     entry = LeagueEntry.__find_entry(league["entries"], player_team_id)
-                    entries[player_team_id] = LeagueEntry(league["queue"], league["tier"], entry["division"], entry["lp"])
+                    try:
+                        entries[player_team_id] = LeagueEntry(league["queue"], league["tier"], entry["division"], entry["leaguePoints"])
+                    except KeyError as e:
+                        logging.getLogger(__name__).error("Missing {} in data: {}".format(e.message, league))
 
         return entries
 
