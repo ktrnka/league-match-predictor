@@ -259,7 +259,7 @@ class ApiCache(object):
 
     def set_league(self, player, league):
         assert isinstance(player, riot_data.Summoner)
-        assert isinstance(league, riot_data.League)
+        assert isinstance(league, riot_data.LeagueEntry)
 
         raise utilities.DevReminderError("set_league not implemented yet")
 
@@ -486,25 +486,25 @@ class MemoizeCache(ApiCache):
         timer = utilities.EstCompletionTimer()
         timer.start()
 
-        # for i, player in enumerate(remote_cache.get_players()):
-        #     self.queue_player(player)
-        #
-        #     try:
-        #         # query for this id and if stats modify is greater than value (fails if not present)
-        #         if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
-        #             self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
-        #             hit_rate["hit"] += 1
-        #         else:
-        #             hit_rate["cached"] += 1
-        #     except riot_api.SummonerNotFoundError:
-        #         hit_rate["miss"] += 1
-        #     except requests.exceptions.HTTPError:
-        #         self.logger.warning("Mucho errors, sleeping 10 sec")
-        #         time.sleep(10)
-        #
-        #     timer.update()
-        #
-        #     self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_players) / 60)))
+        for i, player in enumerate(remote_cache.get_players()):
+            self.queue_player(player)
+
+            try:
+                # query for this id and if stats modify is greater than value (fails if not present)
+                if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
+                    self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
+                    hit_rate["hit"] += 1
+                else:
+                    hit_rate["cached"] += 1
+            except riot_api.SummonerNotFoundError:
+                hit_rate["miss"] += 1
+            except requests.exceptions.HTTPError:
+                self.logger.warning("Mucho errors, sleeping 10 sec")
+                time.sleep(10)
+
+            timer.update()
+
+            self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_players) / 60)))
 
         timer.start()
         hit_rate.clear()

@@ -417,9 +417,10 @@ class ChampionStats(object):
         return self.played - remove_games
 
 
-class League(object):
+class LeagueEntry(object):
     """Represents someone's league entry"""
     __DIVISION_ADDS = {"I": 400, "II": 300, "III": 200, "IV": 100, "V": 0}
+    __TIER_ADDS = {"BRONZE": 0, "SILVER": 500, "GOLD": 1000, "PLATINUM": 1500, "DIAMOND": 2000, "MASTER": 2500, "CHALLENGER": 2600}
 
     def __init__(self, queue, tier, division, points):
         self.tier = tier
@@ -431,16 +432,32 @@ class League(object):
         # TODO: This isn't correct for challenger and maybe not master either
         return self.points + self.__DIVISION_ADDS[self.division]
 
+    def get_merged_points(self):
+        return self.points + self.__DIVISION_ADDS[self.division] + self.__TIER_ADDS[self.tier]
+
+    def to_mongo(self):
+        return {
+            "tier": self.tier,
+            "queue": self.queue,
+            "division": self.division,
+            "points": self.points
+        }
+
+    @staticmethod
+    def from_mongo(data):
+        return LeagueEntry(data["tier"], data["queue"], data["division"], data["points"])
+
     @staticmethod
     def from_response(league_data):
         for player_team_id, data in league_data.iteritems():
-            entry = League.__find_entry(data["entries"], player_team_id)
-            yield League(data["queue"], data["tier"], entry["division"], entry["lp"])
+            entry = LeagueEntry.__find_entry(data["entries"], player_team_id)
+            yield LeagueEntry(data["queue"], data["tier"], entry["division"], entry["lp"])
 
     @staticmethod
     def __find_entry(entries, player_team_id):
         for league_entry in entries:
-            if league_entry["playerOrTeamId"] == player_team_id:
+            # the league entries have their keys as strings
+            if league_entry["playerOrTeamId"] == str(player_team_id):
                 return league_entry
 
 
