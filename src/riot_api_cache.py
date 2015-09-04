@@ -156,13 +156,16 @@ class ApiCache(object):
 
     def get_queued_players(self, max_records, type=TYPE_QUEUED):
         if type == TYPE_QUEUED:
-            c = self.players.find(Envelope.query_queued(True))
+            cursor = self.players.find(Envelope.query_queued(True))
         elif type == TYPE_LEAGUE:
-            c = self.players.find(Envelope.query_data({"league": {"$exists": False}}))
+            cursor = self.players.find(Envelope.query_data({"league": {"$exists": False}}))
         else:
             raise ValueError("Type not recognized: {}".format(type))
 
-        for item in c.limit(max_records):
+        if max_records > 0:
+            cursor = cursor.limit(max_records)
+
+        for item in cursor:
             yield riot_data.Summoner(Envelope.unwrap(item).data)
 
     def get_queued_matches(self, max_records):
@@ -257,13 +260,13 @@ class ApiCache(object):
         elif result["nModified"] == 0:
             self.outcomes["ranked stats: identical update"] += 1
 
-    def set_league(self, player, league):
-        assert isinstance(player, riot_data.Summoner)
+    def set_league(self, player_id, league):
+        assert isinstance(player_id, int)
         assert isinstance(league, riot_data.LeagueEntry)
 
-        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"data.league": league.to_mongo()}})
+        result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.league": league.to_mongo()}})
         if result["nModified"] != 1:
-            self.logger.error("Updating %d to %s weird result: %s", player.id, league.to_mongo(), result)
+            self.logger.error("Updating %d to %s weird result: %s", player_id, league.to_mongo(), result)
 
     def get_league(self, player_id):
         assert isinstance(player_id, int)
@@ -491,17 +494,17 @@ class MemoizeCache(ApiCache):
 
         stats_min_date = 1000. * (time.time() - timedelta(stats_expiry_days).total_seconds())
 
+        timer = utilities.EstCompletionTimer()
+
         self.logger.info("Loading summoners from remote cache into local and fetching ranked stats with limit date {}".format(int(stats_min_date)))
         total_players = remote_cache.players.find({}).count()
-
-        timer = utilities.EstCompletionTimer()
         timer.start()
 
         for i, player in enumerate(remote_cache.get_players()):
             self.queue_player(player)
 
             try:
-                # query for this id and if stats modify is greater than value (fails if not present)
+                # query for this id and if stats modify is greater than value (fails if not present so we'll fill it in)
                 if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
                     self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
                     hit_rate["hit"] += 1
@@ -516,6 +519,17 @@ class MemoizeCache(ApiCache):
             timer.update()
 
             self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_players) / 60)))
+
+        timer.start()
+        player_ids = list(player.id for player in self.get_queued_players(-1, TYPE_LEAGUE))
+        self.logger.info("Updating league entries for {:,} players".format(len(player_ids)))
+        for player_id_chunk in utilities.chunks(player_ids, 10):
+            leagues = self.riot_connection.get_leagues(player_id_chunk)
+            for player_id, league_entry in leagues.iteritems():
+                self.set_league(player_id, league_entry)
+
+            timer.update()
+            self.heartbeat_logger.info("Fetching leagues expected completion in {} min".format(int(timer.get_expected_remaining_seconds(len(player_ids)) / 60)))
 
         timer.start()
         hit_rate.clear()
@@ -547,7 +561,7 @@ class MemoizeCache(ApiCache):
             self.heartbeat_logger.info("Processed {:,} matches outcomes {}. Expected completion in {} min".format(i + 1, utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_matches) / 60)))
 
 def _filter_match_data(data):
-    """Remove uninteresting fields from a match dict to save space"""
+    """Remove some fields from a match dict to save space"""
     for team in data["teams"]:
         assert isinstance(team, dict)
         del team["vilemawKills"]

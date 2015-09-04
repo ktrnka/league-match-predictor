@@ -10,7 +10,8 @@ import riot_api
 import riot_api_cache
 import riot_data
 import requests.exceptions
-from utilities import DevReminderError
+from utilities import chunks
+
 
 EPOCH = datetime.datetime.utcfromtimestamp(0)
 
@@ -20,13 +21,6 @@ def parse_args():
     parser.add_argument("-v", "--verbose", default=False, action="store_true", help="Verbose logging")
     parser.add_argument("config", help="Config file")
     return parser.parse_args()
-
-
-def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
-    for i in xrange(0, len(l), n):
-        yield l[i:i + n]
-
 
 def queue_featured(riot_cache, riot_connection, queued_counts):
     logger = logging.getLogger(__name__)
