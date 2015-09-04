@@ -249,7 +249,7 @@ class MatchReference(MatchBase):
 
 
     def is_interesting(self):
-        return Season.is_interesting(self.season) and Queue.is_interesting(self.queue)
+        return Season.is_interesting(self.season) and Queue.is_interesting(self.queue) and self.platform_id == "NA1"
 
     def get_creation_datetime(self):
         return datetime.datetime.fromtimestamp(self.timestamp / 1000.)

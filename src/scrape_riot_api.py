@@ -111,10 +111,13 @@ def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
     outcomes = collections.Counter()
 
     for match in riot_cache.get_queued_matches(max_matches):
-        match_id = match["data"]["matchId"]
+        match_ref = riot_data.MatchReference(match["data"])
+        if not match_ref.is_interesting():
+            riot_cache.dequeue_match(match)
+            continue
 
         try:
-            match_info = riot_connection.get_match(match_id)
+            match_info = riot_connection.get_match(match_ref.id)
 
             riot_cache.dequeue_match(match_info)
 
@@ -129,10 +132,10 @@ def update_matches(riot_cache, riot_connection, queued_counts, min_matches=200):
                 # not all games have player identity info so skip if it fails
                 outcomes["failed to parse match data"] += 1
         except requests.exceptions.HTTPError as e:
-            logger.exception("Something went wrong in updating %d", match_id)
+            logger.exception("Something went wrong in updating %d", match_ref.id)
 
             if e.response.status_code == 404:
-                riot_cache.remove_match(match_id)
+                riot_cache.remove_match(match_ref.id)
 
 
     logger.info("Outcomes from fetching queued matches: %s", outcomes.most_common())
