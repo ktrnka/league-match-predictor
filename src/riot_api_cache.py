@@ -474,7 +474,10 @@ class MemoizeCache(ApiCache):
 
         self.logger.info("Loading summoners from remote cache into local and fetching ranked stats with limit date {}".format(int(stats_min_date)))
         total_players = remote_cache.players.find({}).count()
-        start_time = time.time()
+
+        timer = utilities.EstCompletionTimer()
+        timer.start()
+
         for i, player in enumerate(remote_cache.get_players()):
             self.queue_player(player)
 
@@ -491,10 +494,9 @@ class MemoizeCache(ApiCache):
                 self.logger.warning("Mucho errors, sleeping 10 sec")
                 time.sleep(10)
 
-            elapsed_time = time.time() - start_time
-            completed = float(i + 1) / total_players
-            expected_duration = elapsed_time / completed
-            self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(expected_duration / 60)))
+            timer.update()
+
+            self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds() / 60)))
 
         self.logger.info("Loading matches from remote cache into local and fetching match details")
         for i, match_ref in enumerate(remote_cache.get_matches()):

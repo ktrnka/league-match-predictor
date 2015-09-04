@@ -49,6 +49,31 @@ class RequestTimer(object):
         return self.elapsed_time / float(self.num_requests)
 
 
+class EstCompletionTimer(object):
+    """Simple tracker to estimate how long it'll take to finish a long-running task"""
+    def __init__(self):
+        self.start_time = None
+        self.units_processed = 0
+        self.start()
+
+    def start(self):
+        self.start_time = time.time()
+        self.units_processed = 0
+
+    def update(self, units_processed=1):
+        self.units_processed += units_processed
+
+    def get_expected_total_seconds(self, total_units):
+        elapsed = time.time() - self.start_time
+        units_completed = self.units_processed / float(total_units)
+
+        return elapsed / units_completed
+
+    def get_expected_remaining_seconds(self, total_units):
+        elapsed = time.time() - self.start_time
+        return self.get_expected_total_seconds(total_units) - elapsed
+
+
 class DevReminderError(BaseException):
     """Error to remind me to implement something"""
     def __init__(self, message):
@@ -56,7 +81,7 @@ class DevReminderError(BaseException):
 
 def summarize_counts(counter):
     total = sum(counter.itervalues())
-    return ", ".join("{}: {:.1f}% ({:,})".format(k, 100. * v / total, v) for k, v in sorted(counter.iteritems(), key=itemgetter(1), reverse=True))
+    return ", ".join("{}: {:.1f}% ({:,})".format(k, 100. * v / total, v) for k, v in counter.most_common())
 
 
 def parse_args():
