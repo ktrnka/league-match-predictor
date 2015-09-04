@@ -221,8 +221,14 @@ class RiotService(object):
     def get_leagues(self, player_ids):
         """Get a mapping of player_id -> LeagueEntry"""
         ids = ",".join(unicode(x) for x in player_ids)
-        data = self.request("v2.5/league/by-summoner/{}/entry".format(ids))
-        return riot_data.LeagueEntry.from_response(data)
+        try:
+            data = self.request("v2.5/league/by-summoner/{}/entry".format(ids))
+            return riot_data.LeagueEntry.from_response(data)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                return {}
+            else:
+                raise e
 
     def get_featured_matches(self):
         data = self.request("featured", self.observer_base_url)
