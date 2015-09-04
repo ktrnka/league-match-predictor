@@ -1,10 +1,9 @@
 from __future__ import unicode_literals
 import logging
-from operator import itemgetter
 import sys
 import argparse
 import time
-
+import collections
 
 class ThrottledFilter(logging.Filter):
     """
@@ -54,14 +53,23 @@ class EstCompletionTimer(object):
     def __init__(self):
         self.start_time = None
         self.units_processed = 0
+        self.outcomes = collections.Counter()
         self.start()
 
     def start(self):
         self.start_time = time.time()
         self.units_processed = 0
+        self.outcomes.clear()
 
-    def update(self, units_processed=1):
+        return self
+
+    def update(self, outcome_label=None, units_processed=1):
         self.units_processed += units_processed
+
+        if outcome_label:
+            self.outcomes[outcome_label] += 1
+
+        return self
 
     def get_expected_total_seconds(self, total_units):
         elapsed = time.time() - self.start_time
@@ -72,6 +80,18 @@ class EstCompletionTimer(object):
     def get_expected_remaining_seconds(self, total_units):
         elapsed = time.time() - self.start_time
         return self.get_expected_total_seconds(total_units) - elapsed
+
+    def log_info(self, total_units):
+        remaining = self.get_expected_remaining_seconds(total_units)
+
+        hours, seconds = divmod(remaining, 60 * 60)
+        minutes, seconds = divmod(seconds, 60)
+        rem_string = "{} min".format(minutes)
+        if hours:
+            rem_string = ", ".join(("{} h".format(hours), rem_string))
+
+        return "{} remaining. {}".format(rem_string, summarize_counts(self.outcomes))
+
 
 
 class DevReminderError(BaseException):
