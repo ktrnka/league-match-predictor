@@ -487,52 +487,29 @@ class MemoizeCache(ApiCache):
 
         return None
 
-    def load(self, remote_cache, stats_expiry_days=7):
-        assert isinstance(remote_cache, ApiCache)
-
+    def __load_leagues(self):
+        timer = utilities.EstCompletionTimer()
+        timer.start()
         hit_rate = collections.Counter()
 
-        stats_min_date = 1000. * (time.time() - timedelta(stats_expiry_days).total_seconds())
-
-        timer = utilities.EstCompletionTimer()
-
-        self.logger.info("Loading summoners from remote cache into local and fetching ranked stats with limit date {}".format(int(stats_min_date)))
-        total_players = remote_cache.players.find({}).count()
-        timer.start()
-
-        for i, player in enumerate(remote_cache.get_players()):
-            self.queue_player(player)
-
-            try:
-                # query for this id and if stats modify is greater than value (fails if not present so we'll fill it in)
-                if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
-                    self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
-                    hit_rate["hit"] += 1
-                else:
-                    hit_rate["cached"] += 1
-            except riot_api.SummonerNotFoundError:
-                hit_rate["miss"] += 1
-            except requests.exceptions.HTTPError:
-                self.logger.warning("Mucho errors, sleeping 10 sec")
-                time.sleep(10)
-
-            timer.update()
-
-            self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_players) / 60)))
-
-        timer.start()
         player_ids = list(player.id for player in self.get_queued_players(-1, TYPE_LEAGUE))
         self.logger.info("Updating league entries for {:,} players".format(len(player_ids)))
         for player_id_chunk in utilities.chunks(player_ids, 10):
             leagues = self.riot_connection.get_leagues(player_id_chunk)
+            hit_rate["hit"] += len(leagues)
+            hit_rate["miss"] += len(player_id_chunk) - len(leagues)
             for player_id, league_entry in leagues.iteritems():
-                self.set_league(player_id, league_entry)
+                self.set_league(int(player_id), league_entry)
 
-            timer.update()
-            self.heartbeat_logger.info("Fetching leagues expected completion in {} min".format(int(timer.get_expected_remaining_seconds(len(player_ids)) / 60)))
+            timer.update(len(player_id_chunk))
+            self.heartbeat_logger.info("Fetching leagues expected completion in {} min, outcomes: {}".format(
+                int(timer.get_expected_remaining_seconds(len(player_ids)) / 60), utilities.summarize_counts(hit_rate)))
 
+    def __load_matches(self, remote_cache):
+        timer = utilities.EstCompletionTimer()
         timer.start()
-        hit_rate.clear()
+        hit_rate = collections.Counter()
+
         self.logger.info("Loading matches from remote cache into local and fetching match details")
         total_matches = remote_cache.matches.find({}).count()
         for i, match_ref in enumerate(remote_cache.get_match_refs()):
@@ -558,7 +535,45 @@ class MemoizeCache(ApiCache):
 
             timer.update()
 
-            self.heartbeat_logger.info("Processed {:,} matches outcomes {}. Expected completion in {} min".format(i + 1, utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_matches) / 60)))
+            self.heartbeat_logger.info("Processed {:,} matches. Outcomes: {}. Expected completion in {} min".format(i + 1,
+                                                                                                                  utilities.summarize_counts(hit_rate),
+                                                                                                                  int(timer.get_expected_remaining_seconds(total_matches) / 60)))
+
+    def __load_players(self, remote_cache, stats_expiry_days):
+        timer = utilities.EstCompletionTimer()
+        timer.start()
+        hit_rate = collections.Counter()
+
+        stats_min_date = 1000. * (time.time() - timedelta(stats_expiry_days).total_seconds())
+        self.logger.info("Loading summoners from remote cache into local and fetching ranked stats")
+        total_players = remote_cache.players.find({}).count()
+
+        for i, player in enumerate(remote_cache.get_players()):
+            self.queue_player(player)
+
+            try:
+                # query for this id and if stats modify is greater than value (fails if not present so we'll fill it in)
+                if self.players.find(Envelope.query_data({"id": player.id, "stats.modifyDate": {"$gt": stats_min_date}})).count() == 0:
+                    self.update_player_stats(player.id, self.riot_connection.get_summoner_ranked_stats(player.id))
+                    hit_rate["hit"] += 1
+                else:
+                    hit_rate["cached"] += 1
+            except riot_api.SummonerNotFoundError:
+                hit_rate["miss"] += 1
+            except requests.exceptions.HTTPError:
+                self.logger.warning("Excessive HTTP errors, sleeping 10 sec")
+                time.sleep(10)
+
+            timer.update()
+
+            self.heartbeat_logger.info("Player loading outcomes {}. Expected completion in {} min".format(utilities.summarize_counts(hit_rate), int(timer.get_expected_remaining_seconds(total_players) / 60)))
+
+    def load(self, remote_cache, stats_expiry_days=7):
+        assert isinstance(remote_cache, ApiCache)
+
+        self.__load_players(remote_cache, stats_expiry_days)
+        self.__load_leagues()
+        self.__load_matches(remote_cache)
 
 def _filter_match_data(data):
     """Remove some fields from a match dict to save space"""
