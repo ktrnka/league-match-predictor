@@ -35,10 +35,12 @@ PLAYER_COLLECTION = "summoners"
 TYPE_LEAGUE = "league"
 TYPE_QUEUED = "queued"
 
+
 class Envelope(object):
     """
     Wraps API data with metadata such as whether it's a queued identifier, when it was last updated, and so on.
     """
+
     def __init__(self, data, is_queued, last_updated, recrawl_start_time):
         self.data = data
         self.is_queued = is_queued
@@ -48,7 +50,8 @@ class Envelope(object):
 
     @staticmethod
     def wrap(data, is_queued=True):
-        return {_ENVELOPE_DATA: data, _ENVELOPE_UPDATED_DATE: datetime.now().strftime(_MONGO_DATE_FORMAT), _ENVELOPE_IS_QUEUED: is_queued}
+        return {_ENVELOPE_DATA: data, _ENVELOPE_UPDATED_DATE: datetime.now().strftime(_MONGO_DATE_FORMAT),
+                _ENVELOPE_IS_QUEUED: is_queued}
 
     @staticmethod
     def unwrap(mongo_object):
@@ -118,7 +121,7 @@ class ApiCache(object):
 
         self.new_matches = collections.Counter()
         self.new_players = collections.Counter()
-        
+
         self._setup_mongo()
 
     def queue_match(self, match):
@@ -171,18 +174,22 @@ class ApiCache(object):
     def get_queued_matches(self, max_records):
         # ranked 5v5
         previous_max_records = max_records
-        for match_data in self.matches.find({"queued": True, "data.queue": riot_data.Match.QUEUE_RANKED_5}).limit(max_records):
+        for match_data in self.matches.find({"queued": True, "data.queue": riot_data.Match.QUEUE_RANKED_5}).limit(
+                max_records):
             yield match_data
             max_records -= 1
-        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, riot_data.Match.QUEUE_RANKED_5)
+        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records,
+                         riot_data.Match.QUEUE_RANKED_5)
 
         # solo 5v5
         previous_max_records = max_records
         if max_records > 0:
-            for match_data in self.matches.find({"queued": True, "data.queue": riot_data.Match.QUEUE_RANKED_SOLO}).limit(max_records):
+            for match_data in self.matches.find(
+                    {"queued": True, "data.queue": riot_data.Match.QUEUE_RANKED_SOLO}).limit(max_records):
                 yield match_data
                 max_records -= 1
-        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records, riot_data.Match.QUEUE_RANKED_SOLO)
+        self.logger.info("Retrieved %d queued %s matches", previous_max_records - max_records,
+                         riot_data.Match.QUEUE_RANKED_SOLO)
 
     def get_players_recrawl(self, max_records):
         """Get an iterable of players to recrawl for match history or other purposes"""
@@ -196,7 +203,9 @@ class ApiCache(object):
 
         if max_records > 0:
             previous_max_records = max_records
-            for player_data in self.players.find({"recrawl_at": {"$ne": None}}).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
+            for player_data in self.players.find({"recrawl_at": {"$ne": None}}).sort("recrawl_at",
+                                                                                     pymongo.ASCENDING).limit(
+                    max_records):
                 envelope = Envelope.unwrap(player_data)
                 players.append((envelope, riot_data.Summoner(envelope.data)))
                 max_records -= 1
@@ -216,7 +225,9 @@ class ApiCache(object):
         if max_records > 0:
             previous_max_records = max_records
             # TODO: This is hijacking the "recrawl_at" field to be used for both match history and summoner stats
-            for player_data in self.players.find(Envelope.query_data({"stats": {"$exists": True}})).sort("recrawl_at", pymongo.ASCENDING).limit(max_records):
+            for player_data in self.players.find(Envelope.query_data({"stats": {"$exists": True}})).sort("recrawl_at",
+                                                                                                         pymongo.ASCENDING).limit(
+                    max_records):
                 players.append(riot_data.Summoner(Envelope.unwrap(player_data).data))
                 max_records -= 1
             self.logger.info("%d players selected with earliest recrawl dates", previous_max_records - max_records)
@@ -240,7 +251,8 @@ class ApiCache(object):
 
             # TODO: Convert this to a clever upsert.
             if self.players.find(Envelope.query_data({"id": player.id})):
-                result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"data.name": player.name}})
+                result = self.players.update(Envelope.query_data({"id": player.id}),
+                                             {"$set": {"data.name": player.name}})
                 self.logger.debug("Updated player name, result: %s", result)
                 updated_count += 1
             else:
@@ -254,6 +266,7 @@ class ApiCache(object):
         assert isinstance(player_id, int)
         assert isinstance(player_stats, dict)
 
+        player_stats["updateDate"] = int(time.time() * 1000)
         result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.stats": player_stats}})
         if result["ok"] != 1 or result["n"] != 1:
             self.logger.error("Bad result in setting player stats: %s", result)
@@ -264,7 +277,8 @@ class ApiCache(object):
         assert isinstance(player_id, int)
         assert isinstance(league, riot_data.LeagueEntry)
 
-        result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.league": league.to_mongo()}})
+        result = self.players.update(Envelope.query_data({"id": player_id}),
+                                     {"$set": {"data.league": league.to_mongo()}})
         if result["nModified"] != 1:
             self.logger.error("Updating %d to %s weird result: %s", player_id, league.to_mongo(), result)
 
@@ -281,7 +295,8 @@ class ApiCache(object):
         assert isinstance(player_id, int)
         assert isinstance(player_stats, dict)
 
-        result = self.players.update(Envelope.query_data({"id": player_id}), {"$set": {"data.summary_stats": player_stats}})
+        result = self.players.update(Envelope.query_data({"id": player_id}),
+                                     {"$set": {"data.summary_stats": player_stats}})
         if result["ok"] != 1 or result["n"] != 1:
             self.logger.error("Bad result in setting player stats: %s", result)
         elif result["nModified"] == 0:
@@ -298,13 +313,14 @@ class ApiCache(object):
             return riot_data.PlayerStats.make_blank()
         except pymongo.errors.AutoReconnect:
             if retries_remaining:
-                return self.get_player_stats(player_id, retries_remaining-1)
+                return self.get_player_stats(player_id, retries_remaining - 1)
             else:
                 self.logger.error("Failed to reconnect, giving up and setting empty stats")
                 return riot_data.PlayerStats.make_blank()
 
     def update_match_history_refresh(self, player, recrawl_date, last_match_millis):
-        result = self.players.update(Envelope.query_data({"id": player.id}), {"$set": {"recrawl_at": recrawl_date, "recrawl_begin_time": last_match_millis + 1}})
+        result = self.players.update(Envelope.query_data({"id": player.id}), {
+            "$set": {"recrawl_at": recrawl_date, "recrawl_begin_time": last_match_millis + 1}})
         self.logger.debug("Updated %d match hist refresh for id %d", result["nModified"], player.id)
 
     def update_match(self, match):
@@ -339,8 +355,10 @@ class ApiCache(object):
 
     def summarize(self):
         """Summarize the status of the database overall"""
-        players_queued, players_total = self.players.find({_ENVELOPE_IS_QUEUED: True}).count(), self.players.find({}).count()
-        matches_queued, matches_total = self.matches.find({_ENVELOPE_IS_QUEUED: True}).count(), self.matches.find({}).count()
+        players_queued, players_total = self.players.find({_ENVELOPE_IS_QUEUED: True}).count(), self.players.find(
+            {}).count()
+        matches_queued, matches_total = self.matches.find({_ENVELOPE_IS_QUEUED: True}).count(), self.matches.find(
+            {}).count()
 
         return """
         {:,} players queued ({:.1f}% of {:,})
@@ -382,7 +400,8 @@ class ApiCache(object):
                 play_rates[champion_id] += num_played
                 champion_damages[champion_id]["magic"] += champion_stats["totalMagicDamageDealt"]
                 champion_damages[champion_id]["physical"] += champion_stats["totalPhysicalDamageDealt"]
-                champion_damages[champion_id]["true"] += (champion_stats["totalDamageDealt"] - (champion_stats["totalMagicDamageDealt"] + champion_stats["totalPhysicalDamageDealt"]))
+                champion_damages[champion_id]["true"] += (champion_stats["totalDamageDealt"] - (
+                    champion_stats["totalMagicDamageDealt"] + champion_stats["totalPhysicalDamageDealt"]))
 
         for champion_id, champion_damage_stats in champion_damages.iteritems():
             for damage_type in champion_damage_stats.iterkeys():
@@ -404,7 +423,8 @@ class ApiCache(object):
                 total_data.update(champion_stats_dict)
                 champion_data[champion_id].update(champion_stats_dict)
 
-        return riot_data.ChampionStats(total_data), {k: riot_data.ChampionStats(v) for k, v in champion_data.iteritems()}
+        return riot_data.ChampionStats(total_data), {k: riot_data.ChampionStats(v) for k, v in
+                                                     champion_data.iteritems()}
 
     def aggregate_match_stats(self):
         """Get aggregated win rates by champion id and (version, champ id)"""
@@ -547,11 +567,19 @@ class MemoizeCache(ApiCache):
         """Update ranked stats into local cache"""
         timer = utilities.EstCompletionTimer().start()
 
+        # TODO: Some stats aren't updated often so we waste a ton of time crawling them.
         stats_min_date = 1000. * (time.time() - timedelta(stats_expiry_days).total_seconds())
         self.logger.info("Updating ranked stats")
+        # updateDate
 
-        query = {"$or": [{"data.stats.modifyDate": {"$lt": stats_min_date}},
-                         {"data.stats.modifyDate": {"$exists": False}}]}
+        # complex query because riot sometimes doesn't refresh their stats for some players
+        # so if I use just modifyDate then I end up recrawling about 20,000 every single time
+        riot_modified_date_query = {"$or": [{"data.stats.modifyDate": {"$lt": stats_min_date}},
+                                            {"data.stats.modifyDate": {"$exists": False}}]}
+        my_update_query = {"$or": [{"data.stats.updateDate": {"$lt": stats_min_date}},
+                                   {"data.stats.updateDate": {"$exists": False}}]}
+        query = {"$and": [riot_modified_date_query, my_update_query]}
+
         cursor = self.players.find(query)
         total_updates = cursor.count()
         for player_data in cursor:
@@ -579,8 +607,6 @@ class MemoizeCache(ApiCache):
         self.__load_matches(remote_cache)
 
 
-
-
 def _filter_match_data(data):
     """Remove some fields from a match dict to save space"""
     for team in data["teams"]:
@@ -604,6 +630,7 @@ def _filter_match_data(data):
                 del participant["timeline"][field]
 
     return data
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -635,6 +662,7 @@ def make_unset():
         fields.append("data.teams.{}.dominionVictoryScore".format(i))
 
     return {k: None for k in fields}
+
 
 class NoStatsError(KeyError):
     pass

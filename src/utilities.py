@@ -82,22 +82,26 @@ class EstCompletionTimer(object):
         return self.get_expected_total_seconds(total_units) - elapsed
 
     def log_info(self, total_units):
-        remaining = self.get_expected_remaining_seconds(total_units)
+        remaining = int(self.get_expected_remaining_seconds(total_units))
 
         hours, seconds = divmod(remaining, 60 * 60)
         minutes, seconds = divmod(seconds, 60)
-        rem_string = "{:.0f} min".format(minutes)
+        rem_string = number_string(minutes, "minute", "minutes")
         if hours:
-            rem_string = ", ".join(("{:.0f} h".format(hours), rem_string))
+            rem_string = ", ".join((number_string(hours, "hour", "hours"), rem_string))
 
         return "{} remaining. {:,} / {:,} completed. {}".format(rem_string, self.units_processed, total_units, summarize_counts(self.outcomes))
-
 
 
 class DevReminderError(BaseException):
     """Error to remind me to implement something"""
     def __init__(self, message):
         super(DevReminderError, self).__init__(message)
+
+
+def number_string(number, singular_unit, plural_unit):
+    return "{} {}".format(number, singular_unit if number == 1 else plural_unit)
+
 
 def summarize_counts(counter):
     total = sum(counter.itervalues())
