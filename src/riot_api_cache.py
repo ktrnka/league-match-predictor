@@ -426,9 +426,9 @@ class ApiCache(object):
 
     def _setup_mongo(self):
         result = self.players.ensure_index("data.id", unique=True)
-        self.logger.info("Player ensure index result: {}".format(result))
+        self.logger.debug("Player ensure index result: {}".format(result))
         result = self.matches.ensure_index("data.matchId", unique=True)
-        self.logger.info("Match ensure index result: {}".format(result))
+        self.logger.debug("Match ensure index result: {}".format(result))
 
     def get_players(self):
         """Get all player objects in database, parsed"""
@@ -550,7 +550,9 @@ class MemoizeCache(ApiCache):
         stats_min_date = 1000. * (time.time() - timedelta(stats_expiry_days).total_seconds())
         self.logger.info("Updating ranked stats")
 
-        cursor = self.players.find(Envelope.query_data({"stats.modifyDate": {"$gt": stats_min_date}}))
+        query = {"$or": [{"data.stats.modifyDate": {"$lt": stats_min_date}},
+                         {"data.stats.modifyDate": {"$exists": False}}]}
+        cursor = self.players.find(query)
         total_updates = cursor.count()
         for player_data in cursor:
             player_envelope = Envelope.unwrap(player_data)
@@ -568,7 +570,7 @@ class MemoizeCache(ApiCache):
 
             self.heartbeat_logger.info(timer.log_info(total_updates))
 
-    def load(self, remote_cache, stats_expiry_days=7):
+    def load(self, remote_cache, stats_expiry_days=12):
         assert isinstance(remote_cache, ApiCache)
 
         self.__load_players(remote_cache)

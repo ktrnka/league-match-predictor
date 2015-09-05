@@ -86,11 +86,11 @@ class EstCompletionTimer(object):
 
         hours, seconds = divmod(remaining, 60 * 60)
         minutes, seconds = divmod(seconds, 60)
-        rem_string = "{} min".format(minutes)
+        rem_string = "{:.0f} min".format(minutes)
         if hours:
-            rem_string = ", ".join(("{} h".format(hours), rem_string))
+            rem_string = ", ".join(("{:.0f} h".format(hours), rem_string))
 
-        return "{} remaining. {}".format(rem_string, summarize_counts(self.outcomes))
+        return "{} remaining. {:,} / {:,} completed. {}".format(rem_string, self.units_processed, total_units, summarize_counts(self.outcomes))
 
 
 

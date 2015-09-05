@@ -141,7 +141,7 @@ class RiotService(object):
         return self.delay_seconds * 10 ** delay_level
 
     def heartbeat(self):
-        self.heartbeat_logger.info("Made %d requests at %.1f req/s: %s", self.num_requests, self.request_timer.get_requests_per_second(), utilities.summarize_counts(self.request_types))
+        self.heartbeat_logger.info("Made {:,} requests at %.1f req/s: %s".format(self.num_requests), self.request_timer.get_requests_per_second(), utilities.summarize_counts(self.request_types))
 
     def throttle(self, delay_level=0):
         scaled_delay_seconds = self.scale_delay(delay_level)
@@ -224,6 +224,7 @@ class RiotService(object):
         ids = ",".join(unicode(x) for x in player_ids)
         try:
             data = self.request("v2.5/league/by-summoner/{}/entry".format(ids))
+            self.request_types["league/by-summoner"] += 1
             return riot_data.LeagueEntry.from_response(data)
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
