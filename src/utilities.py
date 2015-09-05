@@ -67,7 +67,7 @@ class EstCompletionTimer(object):
         self.units_processed += units_processed
 
         if outcome_label:
-            self.outcomes[outcome_label] += 1
+            self.outcomes[outcome_label] += units_processed
 
         return self
 
