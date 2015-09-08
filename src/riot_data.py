@@ -240,15 +240,6 @@ class MatchReference(MatchBase):
         self.queue = data["queue"]
         self.season = data["season"]
 
-        try:
-            self.champion_id = data["champion"]
-            self.lane = data["lane"]
-            self.role = data["role"]
-        except KeyError as e:
-            if self.is_interesting():
-                logging.getLogger(__name__).warning("Missing info in MatchReference. Missing %s, data is %s", e, data)
-
-
     def is_interesting(self):
         return Season.is_interesting(self.season) and Queue.is_interesting(self.queue) and self.platform_id == "NA1"
 
