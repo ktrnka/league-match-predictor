@@ -15,6 +15,7 @@ import riot_data
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", default=False, action="store_true", help="Verbose logging")
+    parser.add_argument("--update", default=False, action="store_true", help="Update local cache before generating data")
     parser.add_argument("config", help="Config file")
     parser.add_argument("output_csv", help="Output file to use for machine learning")
     return parser.parse_args()
@@ -108,7 +109,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
     previous_creation_time = 0
 
     for match_num, match in enumerate(riot_cache.get_matches(chronological=True)):
-        assert previous_creation_time <= match.creation_time
+        assert previous_creation_time <= match.timestamp
         winner = match.get_winning_team_id()
 
         picks = match.get_picks_role()
@@ -131,7 +132,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
 
                 remove_match_player_stats = 0
                 remove_win_player_stats = 0
-                if player_stats.modify_date > match.creation_time and match.full_data["season"] == "SEASON2015":
+                if player_stats.modify_date > match.timestamp and match.full_data["season"] == "SEASON2015":
                     remove_match_player_stats = 1
                     remove_win_player_stats = int(winner == team)
                 assert team == player.team_id
@@ -197,7 +198,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
         if match_num > 2000:
             csv_out.write(",".join(str(x) for x in row) + "\n")
 
-        previous_creation_time = match.creation_time
+        previous_creation_time = match.timestamp
         update_stats(match_history_stats, match)
 
     logger.info("Pulling and converting data took %.1f sec", time.time() - previous_time)
@@ -224,19 +225,21 @@ def main():
     remote_cache = riot_api_cache.ApiCache(config)
     local_cache = riot_api_cache.MemoizeCache(config, riot_connection)
 
-    local_cache.load(remote_cache)
-
-    return
+    if args.update:
+        local_cache.load(remote_cache)
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
     champion_damage_types = local_cache.compute_champion_damage_types()
-    agg_stats, agg_champion_stats = local_cache.aggregate_champion_stats()
+    logger.info("Computing champion damage types took %.1f sec", time.time() - previous_time)
 
-    logger.info("Computing champion damage and aggregate stats took %.1f sec", time.time() - previous_time)
+    previous_time = time.time()
+    agg_stats, agg_champion_stats = local_cache.aggregate_champion_stats()
+    logger.info("Computing champion win rates took %.1f sec", time.time() - previous_time)
+
 
     with io.open(args.output_csv, "w") as csv_out:
-        generate_dataset(riot_connection, remote_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out)
+        generate_dataset(riot_connection, local_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out)
 
 
 
