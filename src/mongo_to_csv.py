@@ -10,6 +10,7 @@ import collections
 import riot_api
 import riot_api_cache
 import riot_data
+import utilities
 
 
 def parse_args():
@@ -78,6 +79,8 @@ def get_player_streaks(player_histories, player_id):
 
 def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out):
     logger = logging.getLogger()
+    heartbeat_logger = logging.getLogger("generate_dataset.heartbeat")
+    heartbeat_logger.addFilter(utilities.ThrottledFilter(10))
     previous_time = time.time()
 
     player_features = []
@@ -107,7 +110,9 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
     csv_out.write(",".join(columns) + "\n")
 
     previous_creation_time = 0
+    timer = utilities.EstCompletionTimer().start()
 
+    total_matches = riot_cache.matches.find({}).count()
     for match_num, match in enumerate(riot_cache.get_matches(chronological=True)):
         assert previous_creation_time <= match.timestamp
         winner = match.get_winning_team_id()
@@ -191,8 +196,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
 
         is_blue_winner = int(winner == teams[0])
 
-        row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + player_features + [
-            is_blue_winner]
+        row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
 
         # history columns are completely inaccurate until this point
         if match_num > 2000:
@@ -200,6 +204,9 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
 
         previous_creation_time = match.timestamp
         update_stats(match_history_stats, match)
+
+        timer.update()
+        heartbeat_logger.info(timer.log_info(total_matches))
 
     logger.info("Pulling and converting data took %.1f sec", time.time() - previous_time)
 

@@ -378,7 +378,8 @@ class ApiCache(object):
     def get_matches(self, chronological=False):
         c = self.matches.find({}).batch_size(100)
         if chronological:
-            c = c.sort("data.matchId", pymongo.ASCENDING)
+            self.matches.ensure_index("data.matchCreation")
+            c = c.sort("data.matchCreation", pymongo.ASCENDING)
 
         for match_data in c:
             yield riot_data.Match(match_data["data"])
