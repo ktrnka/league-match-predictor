@@ -53,12 +53,13 @@ class EstCompletionTimer(object):
     def __init__(self):
         self.start_time = None
         self.units_processed = 0
+        self.total_units = 0
         self.outcomes = collections.Counter()
-        self.start()
 
-    def start(self):
+    def start(self, total_units):
         self.start_time = time.time()
         self.units_processed = 0
+        self.total_units = total_units
         self.outcomes.clear()
 
         return self
@@ -71,18 +72,18 @@ class EstCompletionTimer(object):
 
         return self
 
-    def get_expected_total_seconds(self, total_units):
+    def get_expected_total_seconds(self):
         elapsed = time.time() - self.start_time
-        units_completed = self.units_processed / float(total_units)
+        units_completed = self.units_processed / float(self.total_units)
 
         return elapsed / units_completed
 
-    def get_expected_remaining_seconds(self, total_units):
+    def get_expected_remaining_seconds(self):
         elapsed = time.time() - self.start_time
-        return self.get_expected_total_seconds(total_units) - elapsed
+        return self.get_expected_total_seconds() - elapsed
 
-    def log_info(self, total_units):
-        remaining = int(self.get_expected_remaining_seconds(total_units))
+    def log_info(self):
+        remaining = int(self.get_expected_remaining_seconds())
 
         hours, seconds = divmod(remaining, 60 * 60)
         minutes, seconds = divmod(seconds, 60)
@@ -90,7 +91,7 @@ class EstCompletionTimer(object):
         if hours:
             rem_string = ", ".join((number_string(hours, "hour", "hours"), rem_string))
 
-        return "{} remaining. {:,} / {:,} completed. {}".format(rem_string, self.units_processed, total_units, summarize_counts(self.outcomes))
+        return "{} remaining. {:,} / {:,} completed. {}".format(rem_string, self.units_processed, self.total_units, summarize_counts(self.outcomes))
 
 
 class DevReminderError(BaseException):

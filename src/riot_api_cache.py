@@ -509,9 +509,10 @@ class MemoizeCache(ApiCache):
         return None
 
     def __load_leagues(self):
-        timer = utilities.EstCompletionTimer().start()
-
         player_ids = list(player.id for player in self.get_queued_players(-1, TYPE_LEAGUE))
+
+        timer = utilities.EstCompletionTimer().start(len(player_ids))
+
         self.logger.info("Updating league entries for {:,} players".format(len(player_ids)))
         for player_id_chunk in utilities.chunks(player_ids, 10):
             leagues = self.riot_connection.get_leagues(player_id_chunk)
@@ -522,13 +523,12 @@ class MemoizeCache(ApiCache):
             for player_id, league_entry in leagues.iteritems():
                 self.set_league(int(player_id), league_entry)
 
-            self.heartbeat_logger.info(timer.log_info(len(player_ids)))
+            self.heartbeat_logger.info(timer.log_info())
 
     def __load_matches(self, remote_cache):
-        timer = utilities.EstCompletionTimer().start()
+        timer = utilities.EstCompletionTimer().start(remote_cache.matches.find({}).count())
 
         self.logger.info("Loading matches from remote cache into local and fetching match details")
-        total_matches = remote_cache.matches.find({}).count()
         for i, match_ref in enumerate(remote_cache.get_match_refs()):
             if not match_ref.is_interesting():
                 timer.update("skipped not interesting")
@@ -549,29 +549,39 @@ class MemoizeCache(ApiCache):
                 except requests.exceptions.HTTPError:
                     timer.update("match not found")
 
-            self.heartbeat_logger.info(timer.log_info(total_matches))
+            self.heartbeat_logger.info(timer.log_info())
 
     def __load_players(self, remote_cache):
         """Load players from the remote cache"""
-        timer = utilities.EstCompletionTimer().start()
+        timer = utilities.EstCompletionTimer().start(remote_cache.players.find({}).count())
 
         self.logger.info("Loading summoners from remote cache into local")
-        total_players = remote_cache.players.find({}).count()
 
         for i, player in enumerate(remote_cache.get_players()):
             self.queue_player(player)
 
             timer.update()
-            self.heartbeat_logger.info(timer.log_info(total_players))
+            self.heartbeat_logger.info(timer.log_info())
+
+    def __get_player_ids(self):
+        timer = utilities.EstCompletionTimer().start(self.players.find({}).count())
+
+        self.logger.info("Loading list of players from local")
+
+        id_set = set()
+        for player in self.get_players():
+            id_set.add(player.id)
+            timer.update()
+            self.heartbeat_logger.info(timer.log_info())
+
+        return id_set
 
     def __load_ranked_stats(self, stats_expiry_days):
         """Update ranked stats into local cache"""
-        timer = utilities.EstCompletionTimer().start()
 
         # TODO: Some stats aren't updated often so we waste a ton of time crawling them.
         stats_min_date = 1000. * (time.time() - timedelta(stats_expiry_days).total_seconds())
         self.logger.info("Updating ranked stats")
-        # updateDate
 
         # complex query because riot sometimes doesn't refresh their stats for some players
         # so if I use just modifyDate then I end up recrawling about 20,000 every single time
@@ -581,8 +591,9 @@ class MemoizeCache(ApiCache):
                                    {"data.stats.updateDate": {"$exists": False}}]}
         query = {"$and": [riot_modified_date_query, my_update_query]}
 
-        cursor = self.players.find(query)
-        total_updates = cursor.count()
+        cursor = self.players.find(query).batch_size(100)
+        timer = utilities.EstCompletionTimer().start(cursor.count())
+
         for player_data in cursor:
             player_envelope = Envelope.unwrap(player_data)
             player = riot_data.Summoner(player_envelope.data)
@@ -596,16 +607,42 @@ class MemoizeCache(ApiCache):
                     timer.update("stats fetched, first time")
             except riot_api.SummonerNotFoundError:
                 timer.update("stats not found")
+            except requests.exceptions.HTTPError:
+                timer.update("http error")
 
-            self.heartbeat_logger.info(timer.log_info(total_updates))
+            self.heartbeat_logger.info(timer.log_info())
 
     def load(self, remote_cache, stats_expiry_days=12):
+        """Load player and match data from the remote cache"""
         assert isinstance(remote_cache, ApiCache)
 
         self.__load_players(remote_cache)
         self.__load_ranked_stats(stats_expiry_days)
         self.__load_leagues()
         self.__load_matches(remote_cache)
+
+    def add_match_players(self):
+        """Add any players in the matches that aren't in the summoner database"""
+        cached_player_ids = self.__get_player_ids()
+
+        self.logger.info("Finding players that aren't in the database")
+        timer = utilities.EstCompletionTimer().start(self.matches.find({}).count() * 10)
+        for match in self.get_matches():
+            for participant in match.players:
+                if participant.id not in cached_player_ids:
+                    self.queue_player(riot_data.Summoner.from_fields(participant.id, participant.name))
+                    cached_player_ids.add(participant.id)
+                    timer.update("added player")
+                else:
+                    timer.update("player found")
+            self.heartbeat_logger.info(timer.log_info())
+
+    def update_players(self):
+        """Ensure that we have all summoner information for players in the match database"""
+        # self.add_match_players()
+        self.__load_ranked_stats(12)
+        self.__load_leagues()
+
 
 
 def _filter_match_data(data):

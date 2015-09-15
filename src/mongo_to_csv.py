@@ -80,7 +80,7 @@ def get_player_streaks(player_histories, player_id):
 def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out):
     logger = logging.getLogger()
     heartbeat_logger = logging.getLogger("generate_dataset.heartbeat")
-    heartbeat_logger.addFilter(utilities.ThrottledFilter(10))
+    heartbeat_logger.addFilter(utilities.ThrottledFilter(delay_seconds=10))
     previous_time = time.time()
 
     player_features = []
@@ -110,9 +110,8 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
     csv_out.write(",".join(columns) + "\n")
 
     previous_creation_time = 0
-    timer = utilities.EstCompletionTimer().start()
+    timer = utilities.EstCompletionTimer().start(riot_cache.matches.find({}).count())
 
-    total_matches = riot_cache.matches.find({}).count()
     for match_num, match in enumerate(riot_cache.get_matches(chronological=True)):
         assert previous_creation_time <= match.timestamp
         winner = match.get_winning_team_id()
@@ -206,7 +205,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
         update_stats(match_history_stats, match)
 
         timer.update()
-        heartbeat_logger.info(timer.log_info(total_matches))
+        heartbeat_logger.info(timer.log_info())
 
     logger.info("Pulling and converting data took %.1f sec", time.time() - previous_time)
 
@@ -234,6 +233,7 @@ def main():
 
     if args.update:
         local_cache.load(remote_cache)
+    local_cache.update_players()
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
