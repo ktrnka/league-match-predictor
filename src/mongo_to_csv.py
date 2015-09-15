@@ -17,6 +17,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", default=False, action="store_true", help="Verbose logging")
     parser.add_argument("--update", default=False, action="store_true", help="Update local cache before generating data")
+    parser.add_argument("--max-matches", default=-1, type=int, help="Max matches to output to file")
     parser.add_argument("config", help="Config file")
     parser.add_argument("output_csv", help="Output file to use for machine learning")
     return parser.parse_args()
@@ -77,7 +78,7 @@ def get_player_streaks(player_histories, player_id):
         return 0, 0
 
 
-def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out):
+def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out, max_matches=-1):
     logger = logging.getLogger()
     heartbeat_logger = logging.getLogger("generate_dataset.heartbeat")
     heartbeat_logger.addFilter(utilities.ThrottledFilter(delay_seconds=10))
@@ -201,6 +202,9 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
         if match_num > 2000:
             csv_out.write(",".join(str(x) for x in row) + "\n")
 
+            if 0 < max_matches <= match_num + 2000:
+                break
+
         previous_creation_time = match.timestamp
         update_stats(match_history_stats, match)
 
@@ -246,7 +250,7 @@ def main():
 
 
     with io.open(args.output_csv, "w") as csv_out:
-        generate_dataset(riot_connection, local_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out)
+        generate_dataset(riot_connection, local_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out, max_matches=args.max_matches)
 
 
 
