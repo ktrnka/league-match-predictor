@@ -481,6 +481,7 @@ class MemoizeCache(ApiCache):
             self.logger.info("compute_champion_damage_types: recomputing and storing in mongo")
             data = super(MemoizeCache, self).compute_champion_damage_types()
             cached_data = Envelope.wrap({str(k): v for k, v in data.iteritems()}, is_queued=False)
+            cached_data["key"] = "compute_champion_damage_types"
             self.compute_collection.insert_one(cached_data)
         else:
             self.logger.info("compute_champion_damage_types: found cached in mongo")
@@ -496,6 +497,7 @@ class MemoizeCache(ApiCache):
             self.logger.info("aggregate_champion_stats: recomputing and storing in mongo")
             data = super(MemoizeCache, self).aggregate_champion_stats()
             cached_data = Envelope.wrap(riot_data.ChampionStats.wrap(data), is_queued=False)
+            cached_data["key"] = "aggregate_champion_stats"
             self.compute_collection.insert_one(cached_data)
         else:
             self.logger.info("aggregate_champion_stats: found cached in mongo")
