@@ -50,7 +50,8 @@ class Envelope(object):
 
     @staticmethod
     def wrap(data, is_queued=True):
-        return {_ENVELOPE_DATA: data, _ENVELOPE_UPDATED_DATE: datetime.now().strftime(_MONGO_DATE_FORMAT),
+        return {_ENVELOPE_DATA: data,
+                _ENVELOPE_UPDATED_DATE: datetime.now().strftime(_MONGO_DATE_FORMAT),
                 _ENVELOPE_IS_QUEUED: is_queued}
 
     @staticmethod
@@ -472,6 +473,35 @@ class MemoizeCache(ApiCache):
 
         self.heartbeat_logger = logging.getLogger("MemoizeCache.heartbeat")
         self.heartbeat_logger.addFilter(utilities.ThrottledFilter(delay_seconds=10))
+
+    def compute_champion_damage_types(self):
+        cached_data = self.compute_collection.find_one({"key": "compute_champion_damage_types"})
+
+        if not cached_data:
+            self.logger.info("compute_champion_damage_types: recomputing and storing in mongo")
+            data = super(MemoizeCache, self).compute_champion_damage_types()
+            cached_data = Envelope.wrap({str(k): v for k, v in data.iteritems()}, is_queued=False)
+            self.compute_collection.insert_one(cached_data)
+        else:
+            self.logger.info("compute_champion_damage_types: found cached in mongo")
+            data = {int(k): v for k, v in cached_data["data"].iteritems()}
+
+        return data
+
+    def aggregate_champion_stats(self):
+        # riot_data.ChampionStats(total_data), {k: riot_data.ChampionStats(v) for k, v in champion_data.iteritems()}
+        cached_data = self.compute_collection.find_one({"key": "aggregate_champion_stats"})
+
+        if not cached_data:
+            self.logger.info("aggregate_champion_stats: recomputing and storing in mongo")
+            data = super(MemoizeCache, self).aggregate_champion_stats()
+            cached_data = Envelope.wrap(riot_data.ChampionStats.wrap(data), is_queued=False)
+            self.compute_collection.insert_one(cached_data)
+        else:
+            self.logger.info("aggregate_champion_stats: found cached in mongo")
+            data = riot_data.ChampionStats.unwrap(Envelope.unwrap(cached_data).data)
+
+        return data
 
 
     def get_ranked_stats(self, player_id):

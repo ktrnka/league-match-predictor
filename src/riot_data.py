@@ -343,6 +343,38 @@ class ChampionStats(object):
         #
         # self.turret_kills = data["totalTurretsKilled"]
 
+    def to_mongo(self):
+        return {
+            "totalSessionsPlayed": self.played,
+            "totalSessionsWon": self.won,
+            "totalMagicDamageDealt": self.magic_damage,
+            "totalPhysicalDamageDealt": self.physical_damage,
+            "totalDamageDealt": self.total_damage
+        }
+
+    @staticmethod
+    def wrap(data):
+        if isinstance(data, dict):
+            return {str(k): ChampionStats.wrap(v) for k, v in data.iteritems()}
+        elif isinstance(data, ChampionStats):
+            return data.to_mongo()
+        elif isinstance(data, collections.Sequence):
+            return [ChampionStats.wrap(v) for v in data]
+        else:
+            raise ValueError("Trying to wrap unknown type: {}".format(type(data)))
+
+    @staticmethod
+    def unwrap(data):
+        if isinstance(data, collections.Sequence):
+            return [ChampionStats.unwrap(v) for v in data]
+        elif isinstance(data, dict):
+            if "totalSessionsPlayed" in data:
+                return ChampionStats(data)
+            else:
+                return {int(k): ChampionStats.unwrap(v) for k, v in data.iteritems()}
+        else:
+            return data
+
     @staticmethod
     def from_wins_played(num_wins, num_played):
         data = collections.Counter()

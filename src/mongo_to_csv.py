@@ -17,6 +17,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", default=False, action="store_true", help="Verbose logging")
     parser.add_argument("--update", default=False, action="store_true", help="Update local cache before generating data")
+    parser.add_argument("--no-updates", default=False, action="store_true", help="Disable even the most basic updating")
     parser.add_argument("--max-matches", default=-1, type=int, help="Max matches to output to file")
     parser.add_argument("config", help="Config file")
     parser.add_argument("output_csv", help="Output file to use for machine learning")
@@ -232,12 +233,13 @@ def main():
 
     riot_connection = riot_api.RiotService.from_config(config)
 
-    remote_cache = riot_api_cache.ApiCache(config)
     local_cache = riot_api_cache.MemoizeCache(config, riot_connection)
 
     if args.update:
+        remote_cache = riot_api_cache.ApiCache(config)
         local_cache.load(remote_cache)
-    local_cache.update_players()
+    elif not args.no_updates:
+        local_cache.update_players()
 
     # quickly load all player stats into RAM so we can join more quickly
     previous_time = time.time()
