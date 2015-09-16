@@ -468,7 +468,7 @@ class LeagueEntry(object):
 
     @staticmethod
     def from_mongo(data):
-        return LeagueEntry(data["tier"], data["queue"], data["division"], data["points"])
+        return LeagueEntry(data["queue"], data["tier"], data["division"], data["points"])
 
     @staticmethod
     def from_response(league_data, target_queue=Match.QUEUE_RANKED_SOLO):

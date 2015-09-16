@@ -4,12 +4,14 @@ import collections
 import logging
 import sys
 import argparse
-import time
 import scrape_riot_api
 import riot_api
 import riot_api_cache
 import riot_data
 
+"""
+Exploratory analysis of the database.
+"""
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -100,6 +102,33 @@ def explore_champions(riot_cache, riot_connection):
     print "Total win rate from ranked stats2: {:.1f}%".format(100. * sum(v.won for v in agg_champion_stats.values()) / sum(v.played for v in agg_champion_stats.values()))
     print "Total win rate from match history: {:.1f}% in {:,} games".format(100. * sum(victor_counts.values()) / sum(played_counts.values()), sum(played_counts.values()))
 
+def explore_versions(riot_cache):
+    version_counts = collections.Counter()
+    for match in riot_cache.get_matches():
+        version_counts[match.version] += 1
+
+    # compute counts for the major version (biweekly)
+    for version in version_counts.keys():
+        pieces = version.split(".")
+        major = ".".join(pieces[0:2])
+        version_counts[major] += version_counts[version]
+
+    print "Distribution of matches by game version"
+    for key in sorted(version_counts.iterkeys()):
+        print "{}: {:,}".format(key, version_counts[key])
+
+def explore_current_league(riot_cache):
+    assert isinstance(riot_cache, riot_api_cache.MemoizeCache)
+    league_counts = collections.Counter()
+    for player in riot_cache.get_players():
+        league = riot_cache.get_league(player.id)
+        if league:
+            league_counts[league.tier] += 1
+            league_counts["{} {}".format(league.tier, league.division)] += 1
+
+    print "Distribution of players by league"
+    for key in sorted(league_counts.iterkeys()):
+        print "{}: {:,}".format(key, league_counts[key])
 
 def main():
     args = scrape_riot_api.parse_args()
@@ -117,9 +146,11 @@ def main():
     config = ConfigParser.RawConfigParser()
     config.read([args.config])
 
-    riot_cache = riot_api_cache.ApiCache(config)
     riot_connection = riot_api.RiotService.from_config(config)
+    riot_cache = riot_api_cache.MemoizeCache(config, riot_connection)
 
+    explore_current_league(riot_cache)
+    explore_versions(riot_cache)
     explore_side(riot_cache)
     explore_champions(riot_cache, riot_connection)
 
