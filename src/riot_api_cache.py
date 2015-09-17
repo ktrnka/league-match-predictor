@@ -283,6 +283,7 @@ class ApiCache(object):
         if result["nModified"] != 1:
             self.logger.error("Updating %d to %s weird result: %s", player_id, league.to_mongo(), result)
 
+    @functools32.lru_cache(500000)
     def get_league(self, player_id):
         assert isinstance(player_id, int)
 
@@ -384,6 +385,9 @@ class ApiCache(object):
 
         for match_data in c:
             yield riot_data.Match(match_data["data"])
+
+    def get_num_matches(self):
+        return self.matches.find().count()
 
     def get_match_refs(self):
         c = self.matches.find({}).batch_size(100).sort("data.matchId", pymongo.DESCENDING)

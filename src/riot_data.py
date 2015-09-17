@@ -443,7 +443,8 @@ class ChampionStats(object):
 class LeagueEntry(object):
     """Represents someone's league entry"""
     __DIVISION_ADDS = {"I": 400, "II": 300, "III": 200, "IV": 100, "V": 0}
-    __TIER_ADDS = {"BRONZE": 0, "SILVER": 500, "GOLD": 1000, "PLATINUM": 1500, "DIAMOND": 2000, "MASTER": 2500, "CHALLENGER": 2600}
+    __TIER_ADDS = {"BRONZE": 0, "SILVER": 500, "GOLD": 1000, "PLATINUM": 1500, "DIAMOND": 2000, "MASTER": 2500, "CHALLENGER": 2500}
+
 
     def __init__(self, queue, tier, division, points):
         self.tier = tier
@@ -452,8 +453,10 @@ class LeagueEntry(object):
         self.points = points
 
     def get_merged_division_points(self):
-        # TODO: This isn't correct for challenger and maybe not master either
-        return self.points + self.__DIVISION_ADDS[self.division]
+        points = self.points + self.__TIER_ADDS[self.tier]
+        if points != "MASTER" and points != "CHALLENGER":
+            points += self.__DIVISION_ADDS[self.division]
+        return points
 
     def get_merged_points(self):
         return self.points + self.__DIVISION_ADDS[self.division] + self.__TIER_ADDS[self.tier]
@@ -465,6 +468,27 @@ class LeagueEntry(object):
             "division": self.division,
             "points": self.points
         }
+
+    def is_accurate(self):
+        if self.division == "V" and self.points == 0:
+            return False
+        return True
+
+    @staticmethod
+    def average(leagues):
+        # filter failed lookups
+        leagues = [league for league in leagues if league]
+
+        # filter division 5 0 LP
+        leagues = [league for league in leagues if league.is_accurate()]
+
+        if not leagues:
+            return LeagueEntry("UNKNOWN", "UNKNOWN", "UNKNOWN", 0)
+
+        average_points = sum(league.get_merged_points() for league in leagues) / float(len(leagues))
+        league = LeagueEntry.from_points(average_points)
+        # logging.getLogger(__name__).info("Converted %f points to %s from leagues %s", average_points, league, leagues)
+        return league
 
     @staticmethod
     def from_mongo(data):
@@ -491,6 +515,34 @@ class LeagueEntry(object):
             # the league entries have their keys as strings
             if league_entry["playerOrTeamId"] == str(player_team_id):
                 return league_entry
+
+    @staticmethod
+    def from_points(average_points):
+        tiers_scored = [(tier, average_points - tier_min_points) for tier, tier_min_points in LeagueEntry.__TIER_ADDS.iteritems()]
+
+        # don't match against challenger
+        tiers_scored = [pair for pair in tiers_scored if pair[1] >= 0 and pair[0] != "CHALLENGER"]
+        tier, remaining_points = min(tiers_scored, key=lambda pair: pair[1])
+
+        divs_scored = [(division, remaining_points - div_min_points) for division, div_min_points in LeagueEntry.__DIVISION_ADDS.iteritems()]
+        divs_scored = [pair for pair in divs_scored if pair[1] >= 0]
+        division, league_points = min(divs_scored, key=lambda pair: pair[1])
+
+        # hacky way to say it's a challenger game
+        if tier == "MASTER" and league_points > 400:
+            tier = "CHALLENGER"
+
+        league = LeagueEntry(None, tier, division, league_points)
+        return league
+
+    def __str__(self):
+        return "{} {}, {} LP".format(self.tier, self.division, self.points)
+
+    def get_tier_division(self):
+        return "{} {}".format(self.tier, self.division)
+
+    def __repr__(self):
+        return "{} {}, {} LP".format(self.tier, self.division, self.points)
 
 
 EMPTY_CHAMPION_STATS = ChampionStats(collections.Counter())

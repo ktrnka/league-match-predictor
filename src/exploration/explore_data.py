@@ -8,14 +8,24 @@ import scrape_riot_api
 import riot_api
 import riot_api_cache
 import riot_data
+import utilities
 
 """
 Exploratory analysis of the database.
 """
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     return parser.parse_args()
+
+
+def get_current_average_league(riot_cache, match):
+    assert isinstance(match, riot_data.Match)
+    assert isinstance(riot_cache, riot_api_cache.MemoizeCache)
+
+    leagues = [riot_cache.get_league(p.id) for p in match.players]
+    return riot_data.LeagueEntry.average(leagues)
 
 
 def explore_side(riot_cache):
@@ -26,18 +36,30 @@ def explore_side(riot_cache):
 
     queue_counts = collections.Counter()
 
+    timer = utilities.EstCompletionTimer().start(riot_cache.get_num_matches())
+    logger = logging.getLogger("explore_side_heartbeat")
+    logger.addFilter(utilities.ThrottledFilter(delay_seconds=10))
+
     for match in riot_cache.get_matches():
         victor_counts[match.get_winning_team_id()] += 1
-        victor_by_tier[match.get_average_tier()][match.get_winning_team_id()] += 1
         victor_by_patch[match.version][match.get_winning_team_id()] += 1
-        victor_by_queue_tier[match.queue_type][match.get_average_tier()][match.get_winning_team_id()] += 1
+
+        average_highest_achieved_tier = match.get_average_tier()
+        average_league = get_current_average_league(riot_cache, match)
+        for average_league in [average_highest_achieved_tier, average_league.tier + "*", average_league.get_tier_division()]:
+            victor_by_tier[average_league][match.get_winning_team_id()] += 1
+            victor_by_queue_tier[match.queue_type][average_league][match.get_winning_team_id()] += 1
+
         queue_counts[match.queue_type] += 1
+        timer.update()
+        logger.info(timer.log_info())
 
     print "Queue counts", queue_counts.most_common()
 
     total_matches = sum(victor_counts.itervalues())
     for team_id, win_count in victor_counts.iteritems():
-        print "{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id), 100. * win_count / total_matches, total_matches)
+        print "{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id),
+                                                            100. * win_count / total_matches, total_matches)
 
     tiers = sorted(victor_by_tier.iterkeys(), key=riot_data.Tier.make_sortable_key)
     for tier in tiers:
@@ -45,7 +67,8 @@ def explore_side(riot_cache):
 
         total_matches = sum(victor_by_tier[tier].itervalues())
         for team_id, win_count in victor_by_tier[tier].iteritems():
-            print "\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id), 100. * win_count / total_matches, total_matches)
+            print "\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id),
+                                                                  100. * win_count / total_matches, total_matches)
 
     for queue, tier_stats in victor_by_queue_tier.iteritems():
         print "Queue {}".format(queue)
@@ -56,7 +79,8 @@ def explore_side(riot_cache):
 
             total_matches = sum(tier_stats[tier].itervalues())
             for team_id, win_count in tier_stats[tier].iteritems():
-                print "\t\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id), 100. * win_count / total_matches, total_matches)
+                print "\t\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id),
+                                                                        100. * win_count / total_matches, total_matches)
 
     patches = sorted(victor_by_patch.iterkeys())
     for patch in patches:
@@ -68,8 +92,8 @@ def explore_side(riot_cache):
         print "Patch {}".format(patch)
 
         for team_id, win_count in victor_by_patch[patch].iteritems():
-            print "\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id), 100. * win_count / total_matches, total_matches)
-
+            print "\t{} team: {:.1f}% of {:,} matches won".format(riot_api.RiotService.get_team_name(team_id),
+                                                                  100. * win_count / total_matches, total_matches)
 
 
 def explore_champions(riot_cache, riot_connection):
@@ -95,12 +119,18 @@ def explore_champions(riot_cache, riot_connection):
     for champion_id in sorted(played_counts.iterkeys()):
         print "{} [{}]".format(champion_names[champion_id], champion_id)
 
-        print "\tMatch history: {:.1f}% win rate out of {:,} games played".format(100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
-        print "\tRanked stats:  {:.1f}% win rate out of {:,} games played".format(100. * agg_champion_stats[champion_id].get_win_rate(), agg_champion_stats[champion_id].get_played())
+        print "\tMatch history: {:.1f}% win rate out of {:,} games played".format(
+            100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
+        print "\tRanked stats:  {:.1f}% win rate out of {:,} games played".format(
+            100. * agg_champion_stats[champion_id].get_win_rate(), agg_champion_stats[champion_id].get_played())
 
-    print "Total win rate from ranked stats:  {:.1f}% in {:,} games".format(100. * agg_stats.get_win_rate(), agg_stats.get_played())
-    print "Total win rate from ranked stats2: {:.1f}%".format(100. * sum(v.won for v in agg_champion_stats.values()) / sum(v.played for v in agg_champion_stats.values()))
-    print "Total win rate from match history: {:.1f}% in {:,} games".format(100. * sum(victor_counts.values()) / sum(played_counts.values()), sum(played_counts.values()))
+    print "Total win rate from ranked stats:  {:.1f}% in {:,} games".format(100. * agg_stats.get_win_rate(),
+                                                                            agg_stats.get_played())
+    print "Total win rate from ranked stats2: {:.1f}%".format(
+        100. * sum(v.won for v in agg_champion_stats.values()) / sum(v.played for v in agg_champion_stats.values()))
+    print "Total win rate from match history: {:.1f}% in {:,} games".format(
+        100. * sum(victor_counts.values()) / sum(played_counts.values()), sum(played_counts.values()))
+
 
 def explore_versions(riot_cache):
     version_counts = collections.Counter()
@@ -117,6 +147,7 @@ def explore_versions(riot_cache):
     for key in sorted(version_counts.iterkeys()):
         print "{}: {:,}".format(key, version_counts[key])
 
+
 def explore_current_league(riot_cache):
     assert isinstance(riot_cache, riot_api_cache.MemoizeCache)
     league_counts = collections.Counter()
@@ -129,6 +160,7 @@ def explore_current_league(riot_cache):
     print "Distribution of players by league"
     for key in sorted(league_counts.iterkeys()):
         print "{}: {:,}".format(key, league_counts[key])
+
 
 def main():
     args = scrape_riot_api.parse_args()
@@ -153,7 +185,6 @@ def main():
     explore_versions(riot_cache)
     explore_side(riot_cache)
     explore_champions(riot_cache, riot_connection)
-
 
 
 if __name__ == "__main__":
