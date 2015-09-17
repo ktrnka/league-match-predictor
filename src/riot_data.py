@@ -455,7 +455,7 @@ class LeagueEntry(object):
         self.points = points
 
         if self.tier in self.__SPECIAL_TIERS and division != "I":
-            raise ValueError("Only division I is allowed for tiers {}".format(" ".join(self.__SPECIAL_TIERS)))
+            raise ValueError("Only division I is allowed for tiers {}, found {}".format(" ".join(self.__SPECIAL_TIERS), self))
 
     def get_merged_points(self):
         points = self.points + self.__TIER_ADDS[self.tier]
@@ -473,6 +473,8 @@ class LeagueEntry(object):
 
     def is_accurate(self):
         if self.division == "V" and self.points == 0:
+            return False
+        if self.tier in self.__SPECIAL_TIERS and self.points == 0:
             return False
         return True
 
@@ -525,15 +527,19 @@ class LeagueEntry(object):
 
         # don't match against challenger
         tiers_scored = [pair for pair in tiers_scored if pair[1] >= 0 and pair[0] != "CHALLENGER"]
-        tier, remaining_points = min(tiers_scored, key=lambda pair: pair[1])
+        tier, league_points = min(tiers_scored, key=lambda pair: pair[1])
 
-        divs_scored = [(division, remaining_points - div_min_points) for division, div_min_points in LeagueEntry.__DIVISION_ADDS.iteritems()]
-        divs_scored = [pair for pair in divs_scored if pair[1] >= 0]
-        division, league_points = min(divs_scored, key=lambda pair: pair[1])
+        if tier in LeagueEntry.__SPECIAL_TIERS:
+            division = "I"
 
-        # hacky way to say it's a challenger game
-        if tier == "MASTER" and league_points > 400:
-            tier = "CHALLENGER"
+            # hacky way to say it's a challenger game
+            if league_points > 400:
+                tier = "CHALLENGER"
+        else:
+            divs_scored = [(division, league_points - div_min_points) for division, div_min_points in LeagueEntry.__DIVISION_ADDS.iteritems()]
+            divs_scored = [pair for pair in divs_scored if pair[1] >= 0]
+            division, league_points = min(divs_scored, key=lambda pair: pair[1])
+
 
         league = LeagueEntry(None, tier, division, league_points)
         return league
@@ -565,3 +571,19 @@ class LeagueTests(unittest.TestCase):
 
         challenger_points = LeagueEntry(None, "CHALLENGER", "I", 50)
         self.assertEqual(master_points.get_merged_points(), challenger_points.get_merged_points())
+
+    def test_average(self):
+        gold5 = LeagueEntry(None, "GOLD", "V", 0)
+        gold2 = LeagueEntry(None, "GOLD", "II", 12)
+
+        single_average = LeagueEntry.average([gold2])
+        self.assertEqual(gold2.get_merged_points(), single_average.get_merged_points())
+
+        # GOLD V 0 LP means nothing
+        dual_average = LeagueEntry.average([gold2, gold5])
+        self.assertEqual(gold2.get_merged_points(), dual_average.get_merged_points())
+
+        # MASTER 1 0 LP means nothing
+        master_min = LeagueEntry(None, "MASTER", "I", 0)
+        dual_average = LeagueEntry.average([gold2, master_min])
+        self.assertEqual(gold2.get_merged_points(), dual_average.get_merged_points())
