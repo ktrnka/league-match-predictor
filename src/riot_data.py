@@ -4,6 +4,7 @@ import sys
 import argparse
 import datetime
 import collections
+import unittest
 
 
 def parse_args():
@@ -444,6 +445,7 @@ class LeagueEntry(object):
     """Represents someone's league entry"""
     __DIVISION_ADDS = {"I": 400, "II": 300, "III": 200, "IV": 100, "V": 0}
     __TIER_ADDS = {"BRONZE": 0, "SILVER": 500, "GOLD": 1000, "PLATINUM": 1500, "DIAMOND": 2000, "MASTER": 2500, "CHALLENGER": 2500}
+    __SPECIAL_TIERS = {"MASTER", "CHALLENGER"}
 
 
     def __init__(self, queue, tier, division, points):
@@ -452,14 +454,14 @@ class LeagueEntry(object):
         self.division = division
         self.points = points
 
-    def get_merged_division_points(self):
-        points = self.points + self.__TIER_ADDS[self.tier]
-        if points != "MASTER" and points != "CHALLENGER":
-            points += self.__DIVISION_ADDS[self.division]
-        return points
+        if self.tier in self.__SPECIAL_TIERS and division != "I":
+            raise ValueError("Only division I is allowed for tiers {}".format(" ".join(self.__SPECIAL_TIERS)))
 
     def get_merged_points(self):
-        return self.points + self.__DIVISION_ADDS[self.division] + self.__TIER_ADDS[self.tier]
+        points = self.points + self.__TIER_ADDS[self.tier]
+        if self.tier not in self.__SPECIAL_TIERS:
+            points += self.__DIVISION_ADDS[self.division]
+        return points
 
     def to_mongo(self):
         return {
@@ -487,7 +489,8 @@ class LeagueEntry(object):
 
         average_points = sum(league.get_merged_points() for league in leagues) / float(len(leagues))
         league = LeagueEntry.from_points(average_points)
-        # logging.getLogger(__name__).info("Converted %f points to %s from leagues %s", average_points, league, leagues)
+        if any(ind_league.tier == "MASTER" for ind_league in leagues):
+            logging.getLogger(__name__).info("Converted %.1f points to %s from leagues %s", average_points, league, leagues)
         return league
 
     @staticmethod
@@ -542,7 +545,23 @@ class LeagueEntry(object):
         return "{} {}".format(self.tier, self.division)
 
     def __repr__(self):
-        return "{} {}, {} LP".format(self.tier, self.division, self.points)
+        return "{} {}, {} LP [{}]".format(self.tier, self.division, self.points, self.get_merged_points())
 
 
 EMPTY_CHAMPION_STATS = ChampionStats(collections.Counter())
+
+class LeagueTests(unittest.TestCase):
+    def test_interpret(self):
+        min_points = LeagueEntry(None, "BRONZE", "V", 0)
+        self.assertEqual(0, min_points.get_merged_points())
+
+        normal_points = LeagueEntry(None, "GOLD", "II", 50)
+        self.assertEqual(1350, normal_points.get_merged_points())
+
+        master_points = LeagueEntry(None, "MASTER", "I", 50)
+        self.assertEqual(2550, master_points.get_merged_points())
+
+        self.assertRaises(ValueError, LeagueEntry, None, "MASTER", "IV", 50)
+
+        challenger_points = LeagueEntry(None, "CHALLENGER", "I", 50)
+        self.assertEqual(master_points.get_merged_points(), challenger_points.get_merged_points())
