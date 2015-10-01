@@ -213,7 +213,7 @@ def print_logistic_regression_feature_importances(column_names, classifier):
         print format_string.format(name, weight)
 
 
-def logistic_regression(X, y, data, split_iterator, pca=False):
+def logistic_regression(X, y, data, split_iterator, pca=False, run_feature_scaling=True):
     logistic = sklearn.linear_model.LogisticRegression()
 
     # fast grid search
@@ -236,9 +236,10 @@ def logistic_regression(X, y, data, split_iterator, pca=False):
     grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X_scaled, y)
 
-    print "Logistic regression with feature scaling"
-    print_tuning_scores(grid_search)
-    print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
+    if run_feature_scaling:
+        print "Logistic regression with feature scaling"
+        print_tuning_scores(grid_search)
+        print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
 
     # with PCA (slow)
     if pca:
@@ -463,7 +464,7 @@ def main():
         predictability_tests(X, y, data, original_data)
 
     if args.logistic:
-        logistic_regression(X, y, data, cross_val_splits)
+        logistic_regression(X, y, data, cross_val_splits, run_feature_scaling=False)
 
     if args.elastic:
         elastic_net(X, y, cross_val_splits)
