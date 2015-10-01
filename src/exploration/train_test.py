@@ -270,7 +270,7 @@ def elastic_net(X, y, split_iterator):
 def gradient_boosting_exp(X, y, data, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
-        "learning_rate": [0.75, 0.9, 1.],
+        "learning_rate": [0.75, 0.9],
         "min_samples_leaf": [20],
     }
 
@@ -389,18 +389,18 @@ def preprocess_features(data, show_example=False):
     # merge win rates and such across the team
     for team in ["Blue", "Red"]:
         # player-specific games played
-        data = merge_roles(data, team, "_NumGames(player champion season)", include_log_sum=True, include_sum=False, include_min=False)
-        data = merge_roles(data, team, "_NumGames(player season)", include_log_sum=True, include_sum=False, include_min=False)
+        data = merge_roles(data, team, "_NumGames(player champion season)", include_log_sum=True, include_sum=False, include_min=True)
+        data = merge_roles(data, team, "_NumGames(player season)", include_log_sum=True, include_sum=False, include_min=True)
 
         # player-specific win rates
         data = merge_roles(data, team, "_WinRate(player champion season)")
         data = merge_roles(data, team, "_WinRate(player season)")
 
         # win rates and play rates from the general population
-        data = merge_roles(data, team, "_WinRate(champion season)", include_max=False, include_min=False)
+        data = merge_roles(data, team, "_WinRate(champion season)", include_max=True, include_min=True)
         data = merge_roles(data, team, "_PlayRate(champion season)", include_max=False, include_min=False)
-        data = merge_roles(data, team, "_WinRate(champion recent)", include_min=False)
-        data = merge_roles(data, team, "_WinRate(champion version recent)", include_min=False)
+        data = merge_roles(data, team, "_WinRate(champion recent)", include_min=True)
+        data = merge_roles(data, team, "_WinRate(champion version recent)", include_min=True)
 
         data[team + "_Combined_WinRateSum_PlayedLogSum(player champion season)"] = data[team + "_WinRate(player champion season)_Sum"] * data[team + "_NumGames(player champion season)_LogSum"]
         data[team + "_Combined_WinRateSum_PlayedLogSum(player season)"] = data[team + "_WinRate(player season)_Sum"] * data[team + "_NumGames(player season)_LogSum"]
