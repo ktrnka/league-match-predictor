@@ -458,6 +458,9 @@ class LeagueEntry(object):
             raise ValueError("Only division I is allowed for tiers {}, found {}".format(" ".join(self.__SPECIAL_TIERS), self))
 
     def get_merged_points(self):
+        if self.tier == "UNKNOWN":
+            return -1
+
         points = self.points + self.__TIER_ADDS[self.tier]
         if self.tier not in self.__SPECIAL_TIERS:
             points += self.__DIVISION_ADDS[self.division]

@@ -79,6 +79,15 @@ def get_player_streaks(player_histories, player_id):
         return 0, 0
 
 
+def get_team_tier_points(riot_cache, match, team_id):
+    assert isinstance(match, riot_data.Match)
+    assert isinstance(riot_cache, riot_api_cache.MemoizeCache)
+
+    leagues = [riot_cache.get_league(p.id) for p in match.players if p.team_id == team_id]
+    average_league = riot_data.LeagueEntry.average(leagues)
+    return average_league.get_merged_points()
+
+
 def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out, max_matches=-1):
     logger = logging.getLogger()
     heartbeat_logger = logging.getLogger("generate_dataset.heartbeat")
@@ -104,7 +113,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
             player_features.append("{}_DamagePercent({})".format(team, damage_type))
-    columns = ["MatchId", "QueueType", "GameVersion", "Blue_Tier", "Red_Tier"] + player_features + ["IsBlueWinner"]
+    columns = ["MatchId", "QueueType", "GameVersion", "Blue_Tier", "Red_Tier", "Blue_Points", "Red_Points"] + player_features + ["IsBlueWinner"]
 
     match_history_stats = dict()
     player_history_stats = dict()
@@ -112,7 +121,12 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
     csv_out.write(",".join(columns) + "\n")
 
     previous_creation_time = 0
-    timer = utilities.EstCompletionTimer().start(riot_cache.matches.find({}).count())
+    match_count = max_matches
+    if not match_count:
+        match_count = riot_cache.matches.find({}).count()
+    else:
+        match_count += 2000
+    timer = utilities.EstCompletionTimer().start(match_count)
 
     for match_num, match in enumerate(riot_cache.get_matches(chronological=True)):
         assert previous_creation_time <= match.timestamp
@@ -122,10 +136,13 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
         teams = sorted(picks.keys())
 
         tiers = match.get_team_tiers_numeric()
+        tier_points = []
 
         player_features = []
         for team in teams:
             damage_types = collections.Counter()
+
+            tier_points.append(get_team_tier_points(riot_cache, match, team))
 
             for player in picks[team]:
                 assert isinstance(player, riot_data.Participant)
@@ -197,7 +214,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
 
         is_blue_winner = int(winner == teams[0])
 
-        row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + player_features + [is_blue_winner]
+        row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + tier_points + player_features + [is_blue_winner]
 
         # history columns are completely inaccurate until this point
         if match_num > 2000:
