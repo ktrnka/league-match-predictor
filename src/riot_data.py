@@ -491,8 +491,8 @@ class LeagueEntry(object):
 
         average_points = sum(league.get_merged_points() for league in leagues) / float(len(leagues))
         league = LeagueEntry.from_points(average_points)
-        if any(ind_league.tier == "MASTER" for ind_league in leagues):
-            logging.getLogger(__name__).info("Converted %.1f points to %s from leagues %s", average_points, league, leagues)
+        # if any(ind_league.tier == "MASTER" for ind_league in leagues):
+        #     logging.getLogger(__name__).info("Converted %.1f points to %s from leagues %s", average_points, league, leagues)
         return league
 
     @staticmethod

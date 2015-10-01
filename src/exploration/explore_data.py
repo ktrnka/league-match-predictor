@@ -181,8 +181,8 @@ def main():
     riot_connection = riot_api.RiotService.from_config(config)
     riot_cache = riot_api_cache.MemoizeCache(config, riot_connection)
 
-    # explore_current_league(riot_cache)
-    # explore_versions(riot_cache)
+    explore_current_league(riot_cache)
+    explore_versions(riot_cache)
     explore_side(riot_cache)
     explore_champions(riot_cache, riot_connection)
 
