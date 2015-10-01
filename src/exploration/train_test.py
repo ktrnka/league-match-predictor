@@ -415,6 +415,7 @@ def preprocess_features(data, show_example=False):
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player champion season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(cvr ps)")
+    data = make_diff_feature(data, "_Points", remove_original=False)
 
     data = pandas.get_dummies(data)
 
