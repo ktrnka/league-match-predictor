@@ -88,6 +88,13 @@ def get_team_tier_points(riot_cache, match, team_id):
     return average_league.get_merged_points()
 
 
+def fill_missing_points(tier_points):
+    """If one of the values is < 0 replace it with the other value"""
+    non_default = max(tier_points)
+
+    return [p if p > 0 else non_default for p in tier_points]
+
+
 def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out, max_matches=-1):
     logger = logging.getLogger()
     heartbeat_logger = logging.getLogger("generate_dataset.heartbeat")
@@ -122,7 +129,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
 
     previous_creation_time = 0
     match_count = max_matches
-    if not match_count:
+    if match_count <= 0:
         match_count = riot_cache.matches.find({}).count()
     else:
         match_count += 2000
@@ -214,13 +221,15 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
 
         is_blue_winner = int(winner == teams[0])
 
+        tier_points = fill_missing_points(tier_points)
+
         row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + tier_points + player_features + [is_blue_winner]
 
         # history columns are completely inaccurate until this point
         if match_num > 2000:
             csv_out.write(",".join(str(x) for x in row) + "\n")
 
-            if 0 < max_matches <= match_num + 2000:
+            if 0 < max_matches <= match_num - 2000:
                 break
 
         previous_creation_time = match.timestamp
