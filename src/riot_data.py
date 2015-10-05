@@ -56,7 +56,9 @@ class Summoner:
 
 
 class Participant(object):
-    def __init__(self, team_id, spells, champion_id, name, id=None, tier=None, participant_id=None):
+    _SOLO_ROLES = {"SOLO", "NONE"}
+
+    def __init__(self, team_id, spells, champion_id, name, id=None, tier=None, participant_id=None, role=None):
         assert len(spells) == 2
 
         self.team_id = team_id
@@ -67,6 +69,8 @@ class Participant(object):
         self.id = id
         self.tier = tier
         self.participant_id = participant_id
+
+        self.role = role
 
     def to_summoner(self):
         return Summoner.from_fields(self.id, self.name)
@@ -91,13 +95,19 @@ class Participant(object):
 
     @staticmethod
     def from_split(player, identity):
+        role = None
+        if "timeline" in player:
+            role = player["timeline"]["lane"]
+            if player["timeline"]["role"] not in Participant._SOLO_ROLES:
+                role = "{} {}".format(role, player["timeline"]["role"])
         return Participant(player["teamId"],
                            [player["spell1Id"], player["spell2Id"]],
                            player["championId"],
                            identity["player"]["summonerName"],
                            id=identity["player"]["summonerId"],
                            tier=player["highestAchievedSeasonTier"],
-                           participant_id=player["participantId"])
+                           participant_id=player["participantId"],
+                           role=role)
 
 class Queue(object):
     id_to_name = {
@@ -177,6 +187,13 @@ class Match(MatchBase):
 
         for team_id in picks.keys():
             picks[team_id] = sorted(picks[team_id], key=lambda p: p.id)
+
+        return picks
+
+    def get_roles(self):
+        picks = collections.defaultdict(dict)
+        for player in self.players:
+            picks[player.team_id][player.role] = player.champion_id
 
         return picks
 

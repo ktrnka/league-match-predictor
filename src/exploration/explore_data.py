@@ -100,6 +100,9 @@ def explore_champions(riot_cache, riot_connection):
     victor_counts = collections.Counter()
     played_counts = collections.Counter()
 
+    victor_role_counts = collections.defaultdict(collections.Counter)
+    played_role_counts = collections.defaultdict(collections.Counter)
+
     # compute champion win rates from match history
     for match in riot_cache.get_matches():
         winner = match.get_winning_team_id()
@@ -109,6 +112,13 @@ def explore_champions(riot_cache, riot_connection):
 
             if team_id == winner:
                 victor_counts.update(champion_set)
+
+        for team_id, role_map in match.get_roles().iteritems():
+            for role, champion_id in role_map.iteritems():
+                played_role_counts[champion_id][role] += 1
+
+                if team_id == winner:
+                    victor_role_counts[champion_id][role] += 1
 
     agg_stats, agg_champion_stats = riot_cache.aggregate_champion_stats()
 
@@ -123,6 +133,14 @@ def explore_champions(riot_cache, riot_connection):
             100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
         print "\tRanked stats:  {:.1f}% win rate out of {:,} games played".format(
             100. * agg_champion_stats[champion_id].get_win_rate(), agg_champion_stats[champion_id].get_played())
+
+    print "Champion stats by role"
+    for champion_id in sorted(played_role_counts.iterkeys()):
+        print "{} [{}]".format(champion_names[champion_id], champion_id)
+
+        for role, count in played_role_counts[champion_id].most_common():
+            print "\t{:20s}: {:.1f}% win rate out of {:,} games played".format(role,
+                100. * victor_role_counts[champion_id][role] / played_role_counts[champion_id][role], played_role_counts[champion_id][role])
 
     print "Total win rate from ranked stats:  {:.1f}% in {:,} games".format(100. * agg_stats.get_win_rate(),
                                                                             agg_stats.get_played())
@@ -181,10 +199,10 @@ def main():
     riot_connection = riot_api.RiotService.from_config(config)
     riot_cache = riot_api_cache.MemoizeCache(config, riot_connection)
 
+    explore_champions(riot_cache, riot_connection)
     explore_current_league(riot_cache)
     explore_versions(riot_cache)
     explore_side(riot_cache)
-    explore_champions(riot_cache, riot_connection)
 
 
 if __name__ == "__main__":
