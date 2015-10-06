@@ -96,6 +96,33 @@ def explore_side(riot_cache):
                                                                   100. * win_count / total_matches, total_matches)
 
 
+def coerce_standard_lanes(played_role_counts, victor_role_counts):
+    victor_filtered = collections.defaultdict(collections.Counter)
+    played_filtered = collections.defaultdict(collections.Counter)
+
+    standard_roles = {"BOTTOM DUO_SUPPORT", "BOTTOM DUO_CARRY", "JUNGLE", "MIDDLE", "TOP"}
+
+    for champion_id in played_role_counts.iterkeys():
+        for role, count in played_role_counts[champion_id].iteritems():
+            converted_role = role
+            if role not in standard_roles:
+                parts = role.split()
+                if len(parts) == 2:
+                    lane, lane_role = parts
+                    print "Warning: Shouldn't match this one... {}".format(parts)
+                else:
+                    lane = parts[0]
+                    lane_role = None
+
+                matching_roles = [r for r in standard_roles if r.startswith(lane)]
+                converted_role = max(matching_roles, key=lambda r: played_role_counts[champion_id][r])
+
+            played_filtered[champion_id][converted_role] += count
+            victor_filtered[champion_id][converted_role] += victor_role_counts[champion_id][role]
+
+    return played_filtered, victor_filtered
+
+
 def explore_champions(riot_cache, riot_connection):
     victor_counts = collections.Counter()
     played_counts = collections.Counter()
@@ -133,6 +160,8 @@ def explore_champions(riot_cache, riot_connection):
             100. * victor_counts[champion_id] / played_counts[champion_id], played_counts[champion_id])
         print "\tRanked stats:  {:.1f}% win rate out of {:,} games played".format(
             100. * agg_champion_stats[champion_id].get_win_rate(), agg_champion_stats[champion_id].get_played())
+
+    played_role_counts, victor_role_counts = coerce_standard_lanes(played_role_counts, victor_role_counts)
 
     print "Champion stats by role"
     for champion_id in sorted(played_role_counts.iterkeys()):
