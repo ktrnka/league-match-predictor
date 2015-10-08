@@ -167,7 +167,7 @@ def explore_champions(riot_cache, riot_connection):
     for champion_id in sorted(played_role_counts.iterkeys()):
         print "{} [{}]".format(champion_names[champion_id], champion_id)
 
-        for role, count in played_role_counts[champion_id].most_common():
+        for role, count in utilities.most_common_percent(played_role_counts[champion_id], 0.9):
             print "\t{:20s}: {:.1f}% win rate out of {:,} games played".format(role,
                 100. * victor_role_counts[champion_id][role] / played_role_counts[champion_id][role], played_role_counts[champion_id][role])
 

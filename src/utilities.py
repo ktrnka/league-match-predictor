@@ -109,6 +109,20 @@ def summarize_counts(counter):
     return ", ".join("{}: {:.1f}% ({:,})".format(k, 100. * v / total, v) for k, v in counter.most_common())
 
 
+def most_common_percent(counter, ratio):
+    """Like Counter.most_common but you pass a ratio of the total that you want to show"""
+    assert isinstance(counter, collections.Counter)
+    assert 0 < ratio < 1
+
+    cutoff = sum(counter.itervalues()) * ratio
+    for key, count in counter.most_common():
+        yield key, count
+
+        cutoff -= count
+        if cutoff < 0:
+            break
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     return parser.parse_args()
