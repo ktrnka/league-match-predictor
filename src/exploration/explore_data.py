@@ -4,11 +4,14 @@ import collections
 import logging
 import sys
 import argparse
+import functools32
 import scrape_riot_api
 import riot_api
 import riot_api_cache
 import riot_data
 import utilities
+
+_STANDARD_ROLES = {"BOTTOM DUO_SUPPORT", "BOTTOM DUO_CARRY", "JUNGLE", "MIDDLE", "TOP"}
 
 """
 Exploratory analysis of the database.
@@ -100,27 +103,37 @@ def coerce_standard_lanes(played_role_counts, victor_role_counts):
     victor_filtered = collections.defaultdict(collections.Counter)
     played_filtered = collections.defaultdict(collections.Counter)
 
-    standard_roles = {"BOTTOM DUO_SUPPORT", "BOTTOM DUO_CARRY", "JUNGLE", "MIDDLE", "TOP"}
-
     for champion_id in played_role_counts.iterkeys():
         for role, count in played_role_counts[champion_id].iteritems():
-            converted_role = role
-            if role not in standard_roles:
-                parts = role.split()
-                if len(parts) == 2:
-                    lane, lane_role = parts
-                    print "Warning: Shouldn't match this one... {}".format(parts)
-                else:
-                    lane = parts[0]
-                    lane_role = None
-
-                matching_roles = [r for r in standard_roles if r.startswith(lane)]
-                converted_role = max(matching_roles, key=lambda r: played_role_counts[champion_id][r])
+            converted_role = coerce_standard_lane(played_role_counts, champion_id, role)
 
             played_filtered[champion_id][converted_role] += count
             victor_filtered[champion_id][converted_role] += victor_role_counts[champion_id][role]
 
     return played_filtered, victor_filtered
+
+class LaneStats(object):
+    def __init__(self):
+        self.play_counts = collections.defaultdict(collections.Counter)
+        self.win_counts = collections.defaultdict(collections.Counter)
+
+    def add(self, champion_id, role, is_win):
+        self.play_counts[champion_id][role] += 1
+        if is_win:
+            self.win_counts[champion_id][role] += 1
+
+    @functools32.lru_cache(5000)
+    def coerce_role(self, champion_id, role):
+        return coerce_standard_lane(self.play_counts, champion_id, role)
+
+
+def coerce_standard_lane(played_role_counts, champion_id, role):
+    if role in _STANDARD_ROLES:
+        return role
+
+    lane = role.split()[0]
+    matching_roles = [r for r in _STANDARD_ROLES if r.startswith(lane)]
+    return max(matching_roles, key=lambda r: played_role_counts[champion_id][r])
 
 
 def explore_champions(riot_cache, riot_connection):
@@ -177,6 +190,42 @@ def explore_champions(riot_cache, riot_connection):
         100. * sum(v.won for v in agg_champion_stats.values()) / sum(v.played for v in agg_champion_stats.values()))
     print "Total win rate from match history: {:.1f}% in {:,} games".format(
         100. * sum(victor_counts.values()) / sum(played_counts.values()), sum(played_counts.values()))
+
+    # second pass: force each team into their roles then do diffs
+    played_counts = collections.defaultdict(collections.Counter)
+    victor_counts = collections.defaultdict(collections.Counter)
+    for match in riot_cache.get_matches():
+        winner = match.get_winning_team_id()
+
+        roles = collections.defaultdict(collections.defaultdict)
+        for team_id, role_map in match.get_roles().iteritems():
+            for role, champion_id in role_map.iteritems():
+                role = coerce_standard_lane(played_role_counts, champion_id, role)
+                roles[team_id][role] = champion_id
+
+        teams = sorted(roles.iterkeys())
+        for role in roles[teams[0]]:
+            if role not in roles[teams[1]]:
+                continue
+
+            champions = roles[teams[0]][role], roles[teams[1]][role]
+
+            played_counts[champions[0]][(champions[1], role)] += 1
+            played_counts[champions[1]][(champions[0], role)] += 1
+
+            if winner == teams[0]:
+                victor_counts[champions[0]][(champions[1], role)] += 1
+            else:
+                victor_counts[champions[1]][(champions[0], role)] += 1
+
+    for champion_a in sorted(played_counts.iterkeys()):
+        print "{} [{}]".format(champion_names[champion_id], champion_id)
+        for (champion_b, role), num_played in utilities.most_common_percent(played_counts[champion_a], 0.9):
+            num_wins = victor_counts[champion_a][(champion_b, role)]
+            print "\tvs {}: {:.1f}% win in {:,} games".format(champion_names[champion_b],
+                                                                   100. * num_wins / num_played,
+                                                                   num_played)
+
 
 
 def explore_versions(riot_cache):
