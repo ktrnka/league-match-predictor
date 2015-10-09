@@ -4,6 +4,8 @@ import sys
 import argparse
 import time
 import collections
+import math
+
 
 class ThrottledFilter(logging.Filter):
     """
@@ -121,6 +123,9 @@ def most_common_percent(counter, ratio):
         cutoff -= count
         if cutoff < 0:
             break
+
+def binomial_stddev(p, n):
+    return math.sqrt(p * (1 - p) / n)
 
 
 def parse_args():
