@@ -221,9 +221,10 @@ def explore_champions(riot_cache, riot_connection):
         print "{} [{}]".format(champion_names[champion_a], champion_a)
         for (champion_b, role), num_played in utilities.most_common_percent(played_counts[champion_a], 0.9):
             num_wins = victor_counts[champion_a][(champion_b, role)]
-            print "\tvs {}: {:.1f}% win in {:,} games".format(champion_names[champion_b],
-                                                                   100. * num_wins / num_played,
-                                                                   num_played)
+            print "\tvs {} {}: {:.1f}% win in {:,} games".format(champion_names[champion_b],
+                                                                 role,
+                                                                 100. * num_wins / num_played,
+                                                                 num_played)
 
 
 
