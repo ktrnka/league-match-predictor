@@ -5,7 +5,8 @@ import argparse
 import datetime
 import collections
 import unittest
-
+import functools32
+import utilities
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -18,6 +19,12 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+RED_TEAM = 200
+
+BLUE_TEAM = 100
+
+_STANDARD_ROLES = {"BOTTOM DUO_SUPPORT", "BOTTOM DUO_CARRY", "JUNGLE", "MIDDLE", "TOP"}
 
 
 class Tier(object):
@@ -109,6 +116,7 @@ class Participant(object):
                            participant_id=player["participantId"],
                            role=role)
 
+
 class Queue(object):
     id_to_name = {
         4: "RANKED_SOLO_5x5",
@@ -128,11 +136,13 @@ class Queue(object):
         assert isinstance(queue_name, basestring)
         return queue_name in Queue.interesting_queues
 
+
 class Season(object):
     @staticmethod
     def is_interesting(season_name):
         assert isinstance(season_name, basestring)
         return season_name == "SEASON2015"
+
 
 class MatchBase(object):
     def __init__(self, match_id, timestamp):
@@ -228,8 +238,6 @@ class Match(MatchBase):
         """Parse a partial Match object from a featured match"""
         assert isinstance(data, dict)
 
-        # pprint.pprint(["Featured match data", data])
-
         wrapped_data = dict()
         wrapped_data["matchId"] = data["gameId"]
         wrapped_data["matchMode"] = data["gameMode"]
@@ -266,6 +274,7 @@ class MatchReference(MatchBase):
 
     def export(self):
         return self.full_data
+
 
 def _merge_stats(champion_datas):
     totals = collections.Counter()
@@ -346,21 +355,6 @@ class ChampionStats(object):
         self.physical_damage = data["totalPhysicalDamageDealt"]
         self.total_damage = data["totalDamageDealt"]
 
-        # self.damage_taken = data["totalDamageTaken"]
-        #
-        # self.kills = data["totalChampionKills"]
-        # self.deaths = data["totalDeathsPerSession"]
-        # self.assists = data["totalAssists"]
-        #
-        # self.num_first_blood = data["totalFirstBlood"]
-        #
-        # self.double_kills = data["totalDoubleKills"]
-        # self.triple_kills = data["totalTripleKills"]
-        # self.quadra_kills = data["totalQuadraKills"]
-        # self.penta_kills = data["totalPentaKills"]
-        #
-        # self.turret_kills = data["totalTurretsKilled"]
-
     def to_mongo(self):
         return {
             "totalSessionsPlayed": self.played,
@@ -399,29 +393,6 @@ class ChampionStats(object):
         data["totalSessionsPlayed"] = num_played
         data["totalSessionsWon"] = num_wins
         return ChampionStats(data)
-
-    def get_kda(self, remove_stats=None):
-        return 1
-        # kills = self.kills
-        # assists = self.assists
-        # deaths = self.deaths
-        # if remove_stats:
-        #     kills -= remove_stats.kills
-        #     assists -= remove_stats.assists
-        #     deaths -= remove_stats.deaths
-        #
-        # return (kills + assists + 1) / float(deaths + 1)
-
-    def get_damage_efficiency(self, remove_stats=None):
-        return 1
-        # damage_dealt = self.total_damage
-        # damage_taken = self.damage_taken
-        #
-        # if remove_stats:
-        #     damage_dealt -= remove_stats.total_damage
-        #     damage_taken -= remove_stats.damage_taken
-        #
-        # return (damage_dealt + 1) / float(damage_taken + 1)
 
     def get_win_rate(self, remove_games=0, remove_wins=0, remove_stats=None):
 
@@ -511,8 +482,6 @@ class LeagueEntry(object):
 
         average_points = sum(league.get_merged_points() for league in leagues) / float(len(leagues))
         league = LeagueEntry.from_points(average_points)
-        # if any(ind_league.tier == "MASTER" for ind_league in leagues):
-        #     logging.getLogger(__name__).info("Converted %.1f points to %s from leagues %s", average_points, league, leagues)
         return league
 
     @staticmethod
@@ -576,6 +545,7 @@ class LeagueEntry(object):
 
 EMPTY_CHAMPION_STATS = ChampionStats(collections.Counter())
 
+
 class LeagueTests(unittest.TestCase):
     def test_interpret(self):
         min_points = LeagueEntry(None, "BRONZE", "V", 0)
@@ -607,3 +577,183 @@ class LeagueTests(unittest.TestCase):
         master_min = LeagueEntry(None, "MASTER", "I", 0)
         dual_average = LeagueEntry.average([gold2, master_min])
         self.assertEqual(gold2.get_merged_points(), dual_average.get_merged_points())
+
+
+class RoleStats(object):
+    """Track win rates by champion and lane, help to normalize the lanes and roles"""
+    def __init__(self):
+        self.play_counts = collections.defaultdict(collections.Counter)
+        self.win_counts = collections.defaultdict(collections.Counter)
+
+        self.matchup_play_counts = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+        self.matchup_win_counts = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+
+        self.num_games = 0
+        self.role_matches = collections.Counter()
+        self.role_matchups = collections.Counter()
+
+    def add(self, champion_id, role, is_win):
+        self.play_counts[champion_id][role] += 1
+        if is_win:
+            self.win_counts[champion_id][role] += 1
+
+    def get_role_champions(self, match):
+        """Mapping of coerced roles to team id to champions"""
+        roles = collections.defaultdict(collections.defaultdict)
+        for team_id, role_map in match.get_roles().iteritems():
+            for role, champion_id in role_map.iteritems():
+                # recompute every time until the stats are saturated then use the memoized version
+                if self.num_games > 10000:
+                    role = self.coerce_role(champion_id, role)
+                else:
+                    role = coerce_standard_lane(self.play_counts, champion_id, role)
+                roles[role][team_id] = champion_id
+        return roles
+
+    def add_match(self, match):
+        assert isinstance(match, Match)
+
+        winner = match.get_winning_team_id()
+
+        for team_id, role_map in match.get_roles().iteritems():
+            for role, champion_id in role_map.iteritems():
+                self.add(champion_id, role, team_id == winner)
+
+        # add the lane matchup
+        roles = self.get_role_champions(match)
+
+        matchups_found = [len(roles.get(role, [])) == 2 for role in _STANDARD_ROLES]
+        if all(matchups_found):
+            self.role_matches[True] += 1
+        else:
+            self.role_matches[False] += 1
+
+        self.role_matchups[True] += sum(matchups_found)
+        self.role_matchups[False] += 5 - sum(matchups_found)
+
+        teams = [BLUE_TEAM, RED_TEAM]
+        for role, champion_map in roles.iteritems():
+            if not all(team in champion_map for team in teams):
+                continue
+
+            champions = [champion_map[team] for team in teams]
+            winners = [int(winner == team) for team in teams]
+
+            assert sum(winners) == 1
+
+            # increment blue side
+            self.matchup_play_counts[champions[0]][role][champions[1]] += 1
+            self.matchup_win_counts[champions[0]][role][champions[1]] += winners[0]
+
+            # increment red side
+            self.matchup_play_counts[champions[1]][role][champions[0]] += 1
+            self.matchup_win_counts[champions[1]][role][champions[0]] += winners[1]
+
+        self.num_games += 1
+
+    def get_stats_by_role(self, match):
+        assert isinstance(match, Match)
+
+        roles = self.get_role_champions(match)
+        return {self.get_role_blue_win_rate(role, roles) for role in _STANDARD_ROLES}
+
+    @functools32.lru_cache(5000)
+    def coerce_role(self, champion_id, role):
+        return coerce_standard_lane(self.play_counts, champion_id, role)
+
+    def coerce_roles(self):
+        self.play_counts, self.win_counts = coerce_standard_lanes(self.play_counts, self.win_counts)
+
+    def print_matchups(self, champion_names):
+        for champion_a in sorted(self.matchup_play_counts.iterkeys()):
+            for role, _ in utilities.most_common_percent(self.play_counts[champion_a], 0.9):
+                role_played = self.play_counts[champion_a][role]
+                role_won = self.win_counts[champion_a][role]
+
+                independent_prob = role_won / float(role_played)
+                independent_std = utilities.binomial_stddev(independent_prob, role_played)
+
+                print "{} {} [{:.1f}% +/- {:.1f}%]".format(champion_names[champion_a], role, 100. * independent_prob, 100. * independent_std)
+
+                for champion_b, num_played in utilities.most_common_percent(self.matchup_play_counts[champion_a][role], 0.9):
+                    num_wins = self.matchup_win_counts[champion_a][role][champion_b]
+                    p = num_wins / float(num_played)
+                    std = utilities.binomial_stddev(p, num_played)
+
+                    other_ind_played = self.play_counts[champion_b][role]
+                    other_ind_won = self.win_counts[champion_b][role]
+
+                    other_ind_prob = other_ind_won / float(other_ind_played)
+
+                    avg_prob = (independent_prob + 1. - other_ind_prob) / 2
+
+                    print "\tvs {:20s}: {:.1f}% +/- {:.1f}% in {:6,} games. z={:+3f}. IndP={:.1f}%".format(champion_names[champion_b],
+                                                                         100. * p,
+                                                                         100. * std,
+                                                                         num_played,
+                                                                         (p - independent_prob) / std,
+                                                                         100. * avg_prob)
+
+    def print_roles(self, champion_names):
+        print "What percent of games match the standard 5 roles? {:.1f}%".format(100. * self.role_matches[True] / sum(self.role_matches.values()))
+        print "What percent of roles have a matchup? {:.1f}%".format(100. * self.role_matchups[True] / sum(self.role_matchups.values()))
+        print "Champion stats by role"
+        for champion_id in sorted(self.play_counts.iterkeys()):
+            print "{} [{}]".format(champion_names[champion_id], champion_id)
+
+            for role, count in utilities.most_common_percent(self.play_counts[champion_id], 0.9):
+                print "\t{:20s}: {:.1f}% win rate out of {:,} games played".format(role,
+                    100. * self.win_counts[champion_id][role] / self.play_counts[champion_id][role], self.play_counts[champion_id][role])
+
+    def get_role_blue_win_rate(self, role, roles, default_win_rate=50.5):
+        assert isinstance(role, basestring)
+        assert isinstance(roles, dict)
+
+        # if we don't actually have both of them, return a default
+        if len(roles[role]) != 2:
+            # TODO: If it's just 1 then we could get a better estimate from just that one.
+            return default_win_rate
+
+        champion_blue = roles[role][BLUE_TEAM]
+        champion_red = roles[role][RED_TEAM]
+
+        matchup_won = self.matchup_win_counts[champion_blue][role][champion_red]
+        matchup_played = self.matchup_play_counts[champion_blue][role][champion_red]
+
+        blue_won = self.win_counts[champion_blue][role]
+        blue_played = self.win_counts[champion_blue][role]
+
+        red_won = self.win_counts[champion_red][role]
+        red_played = self.play_counts[champion_red][role]
+
+        # just add the counts
+        independent_won = blue_won + red_played - red_won
+        independent_played = blue_played + red_played
+
+        # smooth even the backoff win rate
+        independent_win_rate = utilities.smooth_win_rate(independent_won, independent_played, default_win_rate, crossover=50)
+
+        return utilities.smooth_win_rate(matchup_won, matchup_played, independent_win_rate, crossover=50)
+
+
+def coerce_standard_lane(played_role_counts, champion_id, role):
+    if role in _STANDARD_ROLES:
+        return role
+
+    lane = role.split()[0]
+    matching_roles = [r for r in _STANDARD_ROLES if r.startswith(lane)]
+    return max(matching_roles, key=lambda r: played_role_counts[champion_id][r])
+
+
+def coerce_standard_lanes(played_role_counts, victor_role_counts):
+    victor_filtered = collections.defaultdict(collections.Counter)
+    played_filtered = collections.defaultdict(collections.Counter)
+
+    for champion_id in played_role_counts.iterkeys():
+        for role, count in played_role_counts[champion_id].iteritems():
+            converted_role = coerce_standard_lane(played_role_counts, champion_id, role)
+
+            played_filtered[champion_id][converted_role] += count
+            victor_filtered[champion_id][converted_role] += victor_role_counts[champion_id][role]
+
+    return played_filtered, victor_filtered

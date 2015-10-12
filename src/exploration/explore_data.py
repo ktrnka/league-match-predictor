@@ -4,14 +4,13 @@ import collections
 import logging
 import sys
 import argparse
-import functools32
+
 import scrape_riot_api
 import riot_api
 import riot_api_cache
 import riot_data
 import utilities
 
-_STANDARD_ROLES = {"BOTTOM DUO_SUPPORT", "BOTTOM DUO_CARRY", "JUNGLE", "MIDDLE", "TOP"}
 
 """
 Exploratory analysis of the database.
@@ -99,116 +98,11 @@ def explore_side(riot_cache):
                                                                   100. * win_count / total_matches, total_matches)
 
 
-def coerce_standard_lanes(played_role_counts, victor_role_counts):
-    victor_filtered = collections.defaultdict(collections.Counter)
-    played_filtered = collections.defaultdict(collections.Counter)
-
-    for champion_id in played_role_counts.iterkeys():
-        for role, count in played_role_counts[champion_id].iteritems():
-            converted_role = coerce_standard_lane(played_role_counts, champion_id, role)
-
-            played_filtered[champion_id][converted_role] += count
-            victor_filtered[champion_id][converted_role] += victor_role_counts[champion_id][role]
-
-    return played_filtered, victor_filtered
-
-class LaneStats(object):
-    """Track win rates by champion and lane, help to normalize the lanes and roles"""
-    def __init__(self):
-        self.play_counts = collections.defaultdict(collections.Counter)
-        self.win_counts = collections.defaultdict(collections.Counter)
-
-        self.matchup_play_counts = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
-        self.matchup_win_counts = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
-
-        self.num_games = 0
-
-    def add(self, champion_id, role, is_win):
-        self.play_counts[champion_id][role] += 1
-        if is_win:
-            self.win_counts[champion_id][role] += 1
-
-    def add_match(self, match):
-        assert isinstance(match, riot_data.Match)
-
-        winner = match.get_winning_team_id()
-
-        for team_id, role_map in match.get_roles().iteritems():
-            for role, champion_id in role_map.iteritems():
-                self.add(champion_id, role, team_id == winner)
-
-        # add the lane matchup
-        roles = collections.defaultdict(collections.defaultdict)
-        for team_id, role_map in match.get_roles().iteritems():
-            for role, champion_id in role_map.iteritems():
-                # recompute every time until the stats are saturated then use the memoized version
-                if self.num_games > 10000:
-                    role = self.coerce_role(champion_id, role)
-                else:
-                    role = coerce_standard_lane(self.play_counts, champion_id, role)
-                roles[role][team_id] = champion_id
-
-        teams = [100, 200]
-        for role, champion_map in roles.iteritems():
-            if not all(team in champion_map for team in teams):
-                continue
-
-            champions = [champion_map[team] for team in teams]
-            winners = [int(winner == team) for team in teams]
-
-            assert sum(winners) == 1
-
-            # increment blue side
-            self.matchup_play_counts[champions[0]][role][champions[1]] += 1
-            self.matchup_win_counts[champions[0]][role][champions[1]] += winners[0]
-
-            # increment red side
-            self.matchup_play_counts[champions[1]][role][champions[0]] += 1
-            self.matchup_win_counts[champions[1]][role][champions[0]] += winners[1]
-
-        self.num_games += 1
-
-    def get_stats_by_role(self, match):
-        assert isinstance(match, riot_data.Match)
-
-    @functools32.lru_cache(5000)
-    def coerce_role(self, champion_id, role):
-        return coerce_standard_lane(self.play_counts, champion_id, role)
-
-    def coerce_roles(self):
-        self.play_counts, self.win_counts = coerce_standard_lanes(self.play_counts, self.win_counts)
-
-    def print_matchups(self, champion_names):
-        for champion_a in sorted(self.matchup_play_counts.iterkeys()):
-            for role, _ in utilities.most_common_percent(self.play_counts[champion_a], 0.9):
-                print "{} {}".format(champion_names[champion_a], role)
-
-                for champion_b, num_played in utilities.most_common_percent(self.matchup_play_counts[champion_a][role], 0.9):
-                    num_wins = self.matchup_win_counts[champion_a][role][champion_b]
-                    p = num_wins / float(num_played)
-
-                    print "\tvs {} {}: {:.1f}% +/- {:.1f}% in {:,} games".format(champion_names[champion_b],
-                                                                         role,
-                                                                         100. * num_wins / num_played,
-                                                                         100. * utilities.binomial_stddev(p, num_played),
-                                                                         num_played)
-
-
-
-def coerce_standard_lane(played_role_counts, champion_id, role):
-    if role in _STANDARD_ROLES:
-        return role
-
-    lane = role.split()[0]
-    matching_roles = [r for r in _STANDARD_ROLES if r.startswith(lane)]
-    return max(matching_roles, key=lambda r: played_role_counts[champion_id][r])
-
-
 def explore_champions(riot_cache, riot_connection):
     victor_counts = collections.Counter()
     played_counts = collections.Counter()
 
-    role_stats = LaneStats()
+    role_stats = riot_data.RoleStats()
 
     # compute champion win rates from match history
     for match in riot_cache.get_matches():
@@ -238,13 +132,7 @@ def explore_champions(riot_cache, riot_connection):
 
     role_stats.coerce_roles()
 
-    print "Champion stats by role"
-    for champion_id in sorted(role_stats.play_counts.iterkeys()):
-        print "{} [{}]".format(champion_names[champion_id], champion_id)
-
-        for role, count in utilities.most_common_percent(role_stats.play_counts[champion_id], 0.9):
-            print "\t{:20s}: {:.1f}% win rate out of {:,} games played".format(role,
-                100. * role_stats.win_counts[champion_id][role] / role_stats.play_counts[champion_id][role], role_stats.play_counts[champion_id][role])
+    role_stats.print_roles(champion_names)
 
     print "Total win rate from ranked stats:  {:.1f}% in {:,} games".format(100. * agg_stats.get_win_rate(),
                                                                             agg_stats.get_played())
@@ -254,46 +142,6 @@ def explore_champions(riot_cache, riot_connection):
         100. * sum(victor_counts.values()) / sum(played_counts.values()), sum(played_counts.values()))
 
     role_stats.print_matchups(champion_names)
-
-    # second pass: force each team into their roles then do diffs
-    played_counts = collections.defaultdict(collections.Counter)
-    victor_counts = collections.defaultdict(collections.Counter)
-    for match in riot_cache.get_matches():
-        winner = match.get_winning_team_id()
-
-        roles = collections.defaultdict(collections.defaultdict)
-        for team_id, role_map in match.get_roles().iteritems():
-            for role, champion_id in role_map.iteritems():
-                role = role_stats.coerce_role(champion_id, role)
-                roles[team_id][role] = champion_id
-
-        teams = sorted(roles.iterkeys())
-        for role in roles[teams[0]]:
-            if role not in roles[teams[1]]:
-                continue
-
-            champions = roles[teams[0]][role], roles[teams[1]][role]
-
-            played_counts[champions[0]][(champions[1], role)] += 1
-            played_counts[champions[1]][(champions[0], role)] += 1
-
-            if winner == teams[0]:
-                victor_counts[champions[0]][(champions[1], role)] += 1
-            else:
-                victor_counts[champions[1]][(champions[0], role)] += 1
-
-    for champion_a in sorted(played_counts.iterkeys()):
-        print "{} [{}]".format(champion_names[champion_a], champion_a)
-        for (champion_b, role), num_played in utilities.most_common_percent(played_counts[champion_a], 0.9):
-            num_wins = victor_counts[champion_a][(champion_b, role)]
-            p = num_wins / float(num_played)
-
-            print "\tvs {} {}: {:.1f}% +/- {:.1f}% in {:,} games".format(champion_names[champion_b],
-                                                                 role,
-                                                                 100. * num_wins / num_played,
-                                                                 100. * utilities.binomial_stddev(p, num_played),
-                                                                 num_played)
-
 
 
 def explore_versions(riot_cache):

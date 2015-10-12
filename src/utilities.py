@@ -133,6 +133,16 @@ def parse_args():
     return parser.parse_args()
 
 
+def smooth_win_rate(primary_won, primary_played, secondary_win_rate, crossover=10):
+    """Blend the win rate from the primary and secondary stats using the reliability of the primary"""
+    primary_weight = primary_played / float(primary_played + crossover)
+
+    primary_win_rate = primary_won / float(primary_played)
+
+    return primary_weight * primary_win_rate + (1 - primary_weight) * secondary_win_rate
+
+
+
 def main():
     args = parse_args()
 
