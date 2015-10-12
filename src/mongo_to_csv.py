@@ -101,6 +101,8 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
     heartbeat_logger.addFilter(utilities.ThrottledFilter(delay_seconds=10))
     previous_time = time.time()
 
+    role_stats = riot_data.RoleStats()
+
     player_features = []
     for team in ["Blue", "Red"]:
         for player in range(1, 6):
@@ -120,7 +122,9 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
                 player_features.append("{}_{}_Spell_{}".format(team, player, summoner_spell_id))
         for damage_type in ["magic", "physical", "true"]:
             player_features.append("{}_DamagePercent({})".format(team, damage_type))
-    columns = ["MatchId", "QueueType", "GameVersion", "Blue_Tier", "Red_Tier", "Blue_Points", "Red_Points"] + player_features + ["IsBlueWinner"]
+    standard_roles = role_stats.get_standard_roles()
+    role_columns = ["Blue_{}_WinRate".format(role.replace(" ", "_")) for role in standard_roles]
+    columns = ["MatchId", "QueueType", "GameVersion", "Blue_Tier", "Red_Tier", "Blue_Points", "Red_Points"] + role_columns + player_features + ["IsBlueWinner"]
 
     match_history_stats = dict()
     player_history_stats = dict()
@@ -222,8 +226,10 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
         is_blue_winner = int(winner == teams[0])
 
         tier_points = fill_missing_points(tier_points)
+        role_win_rates = role_stats.get_stats_by_role(match)
+        role_features = [role_win_rates[role] for role in standard_roles]
 
-        row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + tier_points + player_features + [is_blue_winner]
+        row = [match.id, match.queue_type, match.version] + [tiers[t] for t in teams] + tier_points + role_features + player_features + [is_blue_winner]
 
         # history columns are completely inaccurate until this point
         if match_num > 2000:
@@ -234,6 +240,7 @@ def generate_dataset(riot_connection, riot_cache, agg_champion_stats, agg_stats,
 
         previous_creation_time = match.timestamp
         update_stats(match_history_stats, match)
+        role_stats.add_match(match)
 
         timer.update()
         heartbeat_logger.info(timer.log_info())
