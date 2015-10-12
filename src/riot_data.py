@@ -655,7 +655,7 @@ class RoleStats(object):
         assert isinstance(match, Match)
 
         roles = self.get_role_champions(match)
-        return {self.get_role_blue_win_rate(role, roles) for role in _STANDARD_ROLES}
+        return {role: self.get_role_blue_win_rate(role, roles) for role in _STANDARD_ROLES}
 
     @functools32.lru_cache(5000)
     def coerce_role(self, champion_id, role):
@@ -705,7 +705,7 @@ class RoleStats(object):
                 print "\t{:20s}: {:.1f}% win rate out of {:,} games played".format(role,
                     100. * self.win_counts[champion_id][role] / self.play_counts[champion_id][role], self.play_counts[champion_id][role])
 
-    def get_role_blue_win_rate(self, role, roles, default_win_rate=50.5):
+    def get_role_blue_win_rate(self, role, roles, default_win_rate=0.505):
         assert isinstance(role, basestring)
         assert isinstance(roles, dict)
 
@@ -734,6 +734,10 @@ class RoleStats(object):
         independent_win_rate = utilities.smooth_win_rate(independent_won, independent_played, default_win_rate, crossover=50)
 
         return utilities.smooth_win_rate(matchup_won, matchup_played, independent_win_rate, crossover=50)
+
+    @staticmethod
+    def get_standard_roles():
+        return sorted(_STANDARD_ROLES)
 
 
 def coerce_standard_lane(played_role_counts, champion_id, role):
