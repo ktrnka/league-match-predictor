@@ -137,6 +137,9 @@ def smooth_win_rate(primary_won, primary_played, secondary_win_rate, crossover=1
     """Blend the win rate from the primary and secondary stats using the reliability of the primary"""
     primary_weight = primary_played / float(primary_played + crossover)
 
+    if primary_played == 0:
+        return secondary_win_rate
+
     primary_win_rate = primary_won / float(primary_played)
 
     return primary_weight * primary_win_rate + (1 - primary_weight) * secondary_win_rate
