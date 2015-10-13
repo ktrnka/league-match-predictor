@@ -710,9 +710,19 @@ class RoleStats(object):
         assert isinstance(roles, dict)
 
         # if we don't actually have both of them, return a default
-        if len(roles[role]) != 2:
-            # TODO: If it's just 1 then we could get a better estimate from just that one.
+        if len(roles[role]) == 0:
             return default_win_rate
+        elif len(roles[role]) == 1:
+            if BLUE_TEAM in roles[role]:
+                champion_blue = roles[role][BLUE_TEAM]
+                blue_won = self.win_counts[champion_blue][role]
+                blue_played = self.win_counts[champion_blue][role]
+                return utilities.smooth_win_rate(blue_won, blue_played, default_win_rate, crossover=500)
+            else:
+                champion_red = roles[role][RED_TEAM]
+                red_won = self.win_counts[champion_red][role]
+                red_played = self.play_counts[champion_red][role]
+                return utilities.smooth_win_rate(red_played - red_won, red_played, default_win_rate, crossover=500)
 
         champion_blue = roles[role][BLUE_TEAM]
         champion_red = roles[role][RED_TEAM]
@@ -731,9 +741,9 @@ class RoleStats(object):
         independent_played = blue_played + red_played
 
         # smooth even the backoff win rate
-        independent_win_rate = utilities.smooth_win_rate(independent_won, independent_played, default_win_rate, crossover=50)
+        independent_win_rate = utilities.smooth_win_rate(independent_won, independent_played, default_win_rate, crossover=500)
 
-        return utilities.smooth_win_rate(matchup_won, matchup_played, independent_win_rate, crossover=50)
+        return utilities.smooth_win_rate(matchup_won, matchup_played, independent_win_rate, crossover=500)
 
     @staticmethod
     def get_standard_roles():
