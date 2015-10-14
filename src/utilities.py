@@ -96,6 +96,25 @@ class EstCompletionTimer(object):
         return "{} remaining. {:,} / {:,} completed. {}".format(rem_string, self.units_processed, self.total_units, summarize_counts(self.outcomes))
 
 
+class Timed(object):
+    def __init__(self, func):
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        start_time = time.time()
+        self.func(*args, **kwargs)
+        elapsed = time.time() - start_time
+
+        hours, seconds = divmod(elapsed, 60 * 60)
+        minutes, seconds = divmod(seconds, 60)
+        time_string = number_string(minutes, "minute", "minutes")
+        if hours:
+            time_string = ", ".join((number_string(hours, "hour", "hours"), time_string))
+
+        print "{} took {}".format(self.func.__name__, time_string)
+
+
+
 class DevReminderError(BaseException):
     """Error to remind me to implement something"""
     def __init__(self, message):
@@ -143,7 +162,6 @@ def smooth_win_rate(primary_won, primary_played, secondary_win_rate, crossover=1
     primary_win_rate = primary_won / float(primary_played)
 
     return primary_weight * primary_win_rate + (1 - primary_weight) * secondary_win_rate
-
 
 
 def main():

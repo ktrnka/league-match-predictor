@@ -18,6 +18,7 @@ import sklearn.decomposition
 import sklearn.preprocessing
 from operator import itemgetter
 import collections
+import utilities
 
 N_JOBS = 3
 
@@ -98,7 +99,7 @@ def parse_args():
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
-
+@utilities.Timed
 def random_forest(X, y, data, split_iterator):
     forest = sklearn.ensemble.RandomForestClassifier(10)
     hyperparameter_space = {
@@ -114,7 +115,7 @@ def random_forest(X, y, data, split_iterator):
     print_tuning_scores(grid_search)
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
 
-
+@utilities.Timed
 def predictability_tests(X, y, preprocessed_data, original_data):
     forest = sklearn.ensemble.RandomForestClassifier(n_estimators=100, min_samples_split=50, min_samples_leaf=5)
 
@@ -177,7 +178,7 @@ def predictability_tests(X, y, preprocessed_data, original_data):
             csv_out.write("{},{}%,{}\n".format(key, 100. * num_correct / (num_correct + num_incorrect), num_correct + num_incorrect))
 
 
-
+@utilities.Timed
 def decision_tree(X, y, data, split_iterator):
     tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
 
@@ -212,7 +213,7 @@ def print_logistic_regression_feature_importances(column_names, classifier):
     for name, weight in sorted(paired, key=itemgetter(1), reverse=True):
         print format_string.format(name, weight)
 
-
+@utilities.Timed
 def logistic_regression(X, y, data, split_iterator, pca=False, run_feature_scaling=True):
     logistic = sklearn.linear_model.LogisticRegression()
 
@@ -231,12 +232,12 @@ def logistic_regression(X, y, data, split_iterator, pca=False, run_feature_scali
     print "Logistic regression"
     print_tuning_scores(grid_search)
 
-    # with feature scaling, mostly useful to get reasonable feature importances
-    X_scaled = sklearn.preprocessing.scale(X)
-    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
-    grid_search.fit(X_scaled, y)
-
     if run_feature_scaling:
+        # with feature scaling, mostly useful to get reasonable feature importances
+        X_scaled = sklearn.preprocessing.scale(X)
+        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
+        grid_search.fit(X_scaled, y)
+
         print "Logistic regression with feature scaling"
         print_tuning_scores(grid_search)
         print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
@@ -267,6 +268,7 @@ def elastic_net(X, y, split_iterator):
         print "\tAlpha {:.3f} = {:.2f}% +/- {:.2f}%".format(alpha, 100 * (1 - mse.mean()), 100 * mse.std())
 
 
+@utilities.Timed
 def gradient_boosting_exp(X, y, data, split_iterator):
     gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
     hyperparameter_space = {
@@ -365,6 +367,8 @@ def drop_bad_features(data):
 
     # streak features lead to slight overfitting
     bad_cols.extend([c for c in data.columns if "Streak" in c])
+
+    bad_cols.extend([c for c in data.columns if "BOTTOM" in c or "TOP" in c or "MID" in c or "JUNG" in c])
 
     # drop the per champ*summoners win rates, overfit a little bit
     bad_cols.extend([c for c in data.columns if "champion summoners recent" in c])
