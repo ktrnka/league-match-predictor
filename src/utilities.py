@@ -97,6 +97,7 @@ class EstCompletionTimer(object):
 
 
 class Timed(object):
+    """Decorator for timing how long a function takes"""
     def __init__(self, func):
         self.func = func
 
@@ -114,6 +115,15 @@ class Timed(object):
         print "{} took {}".format(self.func.__name__, time_string)
 
 
+class LogEntryExit(object):
+    """Decorator to message when we enter or exit the function for debugging"""
+    def __init__(self, func):
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        print "Entering {}".format(self.func.__name__)
+        self.func(*args, **kwargs)
+        print "Exiting {}".format(self.func.__name__)
 
 class DevReminderError(BaseException):
     """Error to remind me to implement something"""
