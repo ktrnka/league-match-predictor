@@ -256,7 +256,7 @@ def neural_network(X, y, data, split_iterator, scale_features=True):
         break
 
 @utilities.Timed
-def logistic_regression(X, y, data, split_iterator, pca=False, run_feature_scaling=True):
+def logistic_regression(X, y, data, split_iterator, run_feature_scaling=True):
     if run_feature_scaling:
         X = sklearn.preprocessing.scale(X)
 
@@ -292,6 +292,9 @@ def logistic_regression_cv(X, y, data, split_iterator, run_feature_scaling=True,
         score_matrix = score_matrix.transpose()
         for c_value, c_scores in zip(logistic.Cs_, score_matrix):
             print "C={:.2e} Accuracy = {:.2f}% +/- {:.2f}%".format(c_value, 100. * c_scores.mean(), 100. * c_scores.std())
+
+    print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, logistic)
+
 
 @utilities.Timed
 def elastic_net(X, y, split_iterator):
@@ -502,8 +505,7 @@ def main():
         decision_tree(X, y, data, cross_val_splits)
 
     if args.logistic:
-        logistic_regression_cv(X, y, data, cross_val_splits, run_feature_scaling=True)
-        # logistic_regression(X, y, data, cross_val_splits, run_feature_scaling=False)
+        logistic_regression_cv(X, y, data, cross_val_splits)
 
     if args.learning_curve:
         learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
