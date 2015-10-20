@@ -96,6 +96,7 @@ def parse_args():
     parser.add_argument("--learning-curve", default=None, help="Generate a learning curve and save to file")
     parser.add_argument("--decision-tree", default=False, action="store_true", help="Experiments with decision trees")
     parser.add_argument("--predictability", default=False, action="store_true", help="Tests to analyse which kinds of matches are most predictable")
+    parser.add_argument("--neural-network", default=False, action="store_true", help="Experiments with neural networks")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -212,6 +213,43 @@ def print_logistic_regression_feature_importances(column_names, classifier):
     print "Feature weights in logistic regression"
     for name, weight in sorted(paired, key=itemgetter(1), reverse=True):
         print format_string.format(name, weight)
+
+@utilities.Timed
+def neural_network(X, y, data, split_iterator):
+    from keras.models import Sequential
+    from keras.layers.core import Dense, Dropout, Activation
+    from keras.optimizers import SGD, Adam
+    import keras.regularizers
+
+    print "Neural network"
+
+    for train, test in split_iterator:
+        model = Sequential()
+        # model.add(Dense(128, input_dim=X.shape[1]))
+        # model.add(Activation("sigmoid"))
+        # model.add(Dropout(0.1))
+        model.add(Dense(output_dim=1, input_dim=X.shape[1], W_regularizer=keras.regularizers.l2(1.)))
+        model.add(Activation("sigmoid"))
+
+        model.compile(loss="mse", optimizer=Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-8), class_mode="binary")
+
+        # minibatch followed by some full batch
+        model.fit(X[train], y[train], nb_epoch=800, batch_size=1024, show_accuracy=True)
+        model.fit(X[train], y[train], nb_epoch=10, batch_size=X.shape[0], show_accuracy=True)
+
+        train_accuracy = sklearn.metrics.accuracy_score(y[train], model.predict_classes(X[train]))
+        test_accuracy = sklearn.metrics.accuracy_score(y[test], model.predict_classes(X[test]))
+
+        print "Training accuracy {:.1f}%".format(100 * train_accuracy)
+        print "Testing accuracy {:.1f}%".format(100 * test_accuracy)
+
+        # logistic regression for reference
+        logistic = sklearn.linear_model.LogisticRegression(C=1.0)
+        logistic.fit(X[train], y[train])
+        print "LR training accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[train], logistic.predict(X[train])))
+        print "LR testing accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[test], logistic.predict(X[test])))
+
+        break
 
 @utilities.Timed
 def logistic_regression(X, y, data, split_iterator, pca=False, run_feature_scaling=True):
@@ -368,7 +406,7 @@ def drop_bad_features(data):
     # streak features lead to slight overfitting
     bad_cols.extend([c for c in data.columns if "Streak" in c])
 
-    bad_cols.extend([c for c in data.columns if "BOTTOM" in c or "TOP" in c or "MID" in c or "JUNG" in c])
+    # bad_cols.extend([c for c in data.columns if "BOTTOM" in c or "TOP" in c or "MID" in c or "JUNG" in c])
 
     # drop the per champ*summoners win rates, overfit a little bit
     bad_cols.extend([c for c in data.columns if "champion summoners recent" in c])
@@ -459,6 +497,9 @@ def main():
     if args.decision_tree:
         decision_tree(X, y, data, cross_val_splits)
 
+    if args.logistic:
+        logistic_regression(X, y, data, cross_val_splits, run_feature_scaling=False)
+
     if args.learning_curve:
         learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
 
@@ -468,14 +509,14 @@ def main():
     if args.predictability:
         predictability_tests(X, y, data, original_data)
 
-    if args.logistic:
-        logistic_regression(X, y, data, cross_val_splits, run_feature_scaling=False)
-
     if args.elastic:
         elastic_net(X, y, cross_val_splits)
 
     if args.xg:
         gradient_boosting_exp(X, y, data, cross_val_splits)
+
+    if args.neural_network:
+        neural_network(X, y, data, cross_val_splits)
 
 
 if __name__ == "__main__":
