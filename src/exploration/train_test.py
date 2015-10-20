@@ -257,52 +257,49 @@ def neural_network(X, y, data, split_iterator, scale_features=True):
 
 @utilities.Timed
 def logistic_regression(X, y, data, split_iterator, pca=False, run_feature_scaling=True):
+    if run_feature_scaling:
+        X = sklearn.preprocessing.scale(X)
+
     logistic = sklearn.linear_model.LogisticRegression()
 
-    # fast grid search
-    # logistic_search = sklearn.linear_model.LogisticRegressionCV()
-
-    # old grid search
     hyperparameter_space = {
-        "C": [0.1, 0.5, 1., 2, 4],
-        "penalty": ["l2"]
+        "C": [0.1, 0.5, 1., 2, 4]
     }
 
     grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X, y)
 
-    print "Logistic regression"
-    print_tuning_scores(grid_search)
-
     if run_feature_scaling:
-        # with feature scaling, mostly useful to get reasonable feature importances
-        X_scaled = sklearn.preprocessing.scale(X)
-        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
-        grid_search.fit(X_scaled, y)
-
-        print "Logistic regression with feature scaling"
+        print "Logistic regression (feature scaling)"
         print_tuning_scores(grid_search)
         print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
-
-    # with PCA (slow)
-    if pca:
-        num_components = 0.99
-        pca = sklearn.decomposition.PCA(n_components=num_components, copy=True, whiten=False)
-        X_pca = pca.fit_transform(X)
-
-        grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
-        grid_search.fit(X_pca, y)
-
-        print "Logistic regression with PCA at {} components".format(num_components)
+    else:
+        print "Logistic regression (without feature scaling)"
         print_tuning_scores(grid_search)
 
+@utilities.Timed
+def logistic_regression_cv(X, y, data, split_iterator, run_feature_scaling=True, solver="lbfgs"):
+    if run_feature_scaling:
+        X = sklearn.preprocessing.scale(X)
 
+    logistic = sklearn.linear_model.LogisticRegressionCV(10, solver=solver, n_jobs=N_JOBS, cv=split_iterator)
+    logistic.fit(X, y)
+
+    print "Logistic regression (CV)"
+    for label, score_matrix in logistic.scores_.iteritems():
+        print "Label {}".format(label)
+
+        score_matrix = score_matrix.transpose()
+        for c_value, c_scores in zip(logistic.Cs_, score_matrix):
+            print "C={:.2e} Accuracy = {:.2f}% +/- {:.2f}%".format(c_value, 100. * c_scores.mean(), 100. * c_scores.std())
+
+@utilities.Timed
 def elastic_net(X, y, split_iterator):
     # note that GridSearchCV doesn't work with ElasticNet; need to use ElasticNetCV to select alpha and such
     grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=N_JOBS, cv=split_iterator, n_alphas=100)
     grid_search.fit(X, y)
 
-    print "Elastic net scores"
+    print "Elastic net (CV)"
 
     for i, alpha in enumerate(grid_search.alphas_):
         mse = grid_search.mse_path_[i, :]
@@ -505,7 +502,8 @@ def main():
         decision_tree(X, y, data, cross_val_splits)
 
     if args.logistic:
-        logistic_regression(X, y, data, cross_val_splits, run_feature_scaling=False)
+        logistic_regression_cv(X, y, data, cross_val_splits, run_feature_scaling=True)
+        # logistic_regression(X, y, data, cross_val_splits, run_feature_scaling=False)
 
     if args.learning_curve:
         learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
