@@ -97,6 +97,7 @@ def parse_args():
     parser.add_argument("--decision-tree", default=False, action="store_true", help="Experiments with decision trees")
     parser.add_argument("--predictability", default=False, action="store_true", help="Tests to analyse which kinds of matches are most predictable")
     parser.add_argument("--neural-network", default=False, action="store_true", help="Experiments with neural networks")
+    parser.add_argument("--save-matrix", default=None, help="File to save the feature matrix to")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -228,14 +229,17 @@ def neural_network(X, y, data, split_iterator, scale_features=True):
 
     for train, test in split_iterator:
         model = Sequential()
-        model.add(Dense(output_dim=1, input_dim=X.shape[1], W_regularizer=keras.regularizers.l2(1.)))
-        model.add(Activation("sigmoid"))
+        model.add(Dense(output_dim=128, input_dim=X.shape[1], init="glorot_uniform"))
+        model.add(Activation("relu"))
+        model.add(Dropout(0.5))
+        model.add(Dense(output_dim=1, init="glorot_uniform"))
+        model.add(Activation("relu"))
 
-        model.compile(loss="mse", optimizer=Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-8), class_mode="binary")
+        model.compile(loss="mse", optimizer="adam", class_mode="binary")
 
         # minibatch followed by some full batch
-        model.fit(X[train], y[train], nb_epoch=500, batch_size=1024, show_accuracy=True)
-        model.fit(X[train], y[train], nb_epoch=10, batch_size=X.shape[0], show_accuracy=True)
+        model.fit(X[train], y[train], nb_epoch=400, batch_size=1024, show_accuracy=True)
+        model.fit(X[train], y[train], nb_epoch=100, batch_size=X.shape[0], show_accuracy=True)
 
         train_accuracy = sklearn.metrics.accuracy_score(y[train], model.predict_classes(X[train]))
         test_accuracy = sklearn.metrics.accuracy_score(y[test], model.predict_classes(X[test]))
@@ -488,6 +492,9 @@ def main():
 
     original_data = pandas.read_csv(args.input, header=0)
     data = preprocess_features(original_data)
+
+    if args.save_matrix:
+        data.to_csv(args.save_matrix)
 
     X, y = dataframe_to_ndarrays(data)
     check_data(X, y)
