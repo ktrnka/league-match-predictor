@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import ConfigParser
+import gzip
 import logging
 import sys
 import argparse
@@ -283,8 +284,7 @@ def main():
     agg_stats, agg_champion_stats = local_cache.aggregate_champion_stats()
     logger.info("Computing champion win rates took %.1f sec", time.time() - previous_time)
 
-
-    with io.open(args.output_csv, "w") as csv_out:
+    with io.BufferedWriter(gzip.open(args.output_csv, "w")) as csv_out:
         generate_dataset(riot_connection, local_cache, agg_champion_stats, agg_stats, champion_damage_types, csv_out, max_matches=args.max_matches)
 
 
