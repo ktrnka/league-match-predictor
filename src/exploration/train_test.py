@@ -215,7 +215,10 @@ def print_logistic_regression_feature_importances(column_names, classifier):
         print format_string.format(name, weight)
 
 @utilities.Timed
-def neural_network(X, y, data, split_iterator):
+def neural_network(X, y, data, split_iterator, scale_features=True):
+    if scale_features:
+        X = sklearn.preprocessing.scale(X)
+
     from keras.models import Sequential
     from keras.layers.core import Dense, Dropout, Activation
     from keras.optimizers import SGD, Adam
@@ -225,16 +228,13 @@ def neural_network(X, y, data, split_iterator):
 
     for train, test in split_iterator:
         model = Sequential()
-        # model.add(Dense(128, input_dim=X.shape[1]))
-        # model.add(Activation("sigmoid"))
-        # model.add(Dropout(0.1))
         model.add(Dense(output_dim=1, input_dim=X.shape[1], W_regularizer=keras.regularizers.l2(1.)))
         model.add(Activation("sigmoid"))
 
-        model.compile(loss="mse", optimizer=Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-8), class_mode="binary")
+        model.compile(loss="mse", optimizer=Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-8), class_mode="binary")
 
         # minibatch followed by some full batch
-        model.fit(X[train], y[train], nb_epoch=800, batch_size=1024, show_accuracy=True)
+        model.fit(X[train], y[train], nb_epoch=500, batch_size=1024, show_accuracy=True)
         model.fit(X[train], y[train], nb_epoch=10, batch_size=X.shape[0], show_accuracy=True)
 
         train_accuracy = sklearn.metrics.accuracy_score(y[train], model.predict_classes(X[train]))
