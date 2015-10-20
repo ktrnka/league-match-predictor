@@ -297,17 +297,34 @@ def logistic_regression_cv(X, y, data, split_iterator, run_feature_scaling=True,
 
 
 @utilities.Timed
-def elastic_net(X, y, split_iterator):
+def elastic_net(X, y, split_iterator, scale_features=True):
+    if scale_features:
+        X = sklearn.preprocessing.scale(X)
+
     # note that GridSearchCV doesn't work with ElasticNet; need to use ElasticNetCV to select alpha and such
-    grid_search = sklearn.linear_model.ElasticNetCV(n_jobs=N_JOBS, cv=split_iterator, n_alphas=100)
-    grid_search.fit(X, y)
+    print "Elastic net (CV alpha tuning)"
 
-    print "Elastic net (CV)"
+    for train, test in split_iterator:
+        model = sklearn.linear_model.ElasticNetCV(n_jobs=N_JOBS, copy_X=True)
+        model.fit(X[train], y[train])
 
-    for i, alpha in enumerate(grid_search.alphas_):
-        mse = grid_search.mse_path_[i, :]
+        train_accuracy = sklearn.metrics.accuracy_score(y[train], model.predict(X[train]) > 0.5)
+        test_accuracy = sklearn.metrics.accuracy_score(y[test], model.predict(X[test]) > 0.5)
 
-        print "\tAlpha {:.3f} = {:.2f}% +/- {:.2f}%".format(alpha, 100 * (1 - mse.mean()), 100 * mse.std())
+        print "Training accuracy {:.1f}%".format(100 * train_accuracy)
+        print "Testing accuracy {:.1f}%".format(100 * test_accuracy)
+
+        for i, alpha in enumerate(model.alphas_):
+            mse = model.mse_path_[i, :]
+            print "\tAlpha {} = {:.2f}% +/- {:.2f}%".format(alpha, 100 * (1 - mse.mean()), 100 * mse.std())
+
+        # logistic regression for reference
+        logistic = sklearn.linear_model.LogisticRegression(C=1.0)
+        logistic.fit(X[train], y[train])
+        print "LR training accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[train], logistic.predict(X[train])))
+        print "LR testing accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[test], logistic.predict(X[test])))
+
+        break
 
 
 @utilities.Timed
