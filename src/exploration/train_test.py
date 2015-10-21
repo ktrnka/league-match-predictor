@@ -18,7 +18,9 @@ import sklearn.decomposition
 import sklearn.preprocessing
 from operator import itemgetter
 import collections
+import classifiers
 import utilities
+import math
 
 N_JOBS = 3
 
@@ -220,56 +222,55 @@ def neural_network(X, y, data, split_iterator, scale_features=True):
     if scale_features:
         X = sklearn.preprocessing.scale(X)
 
-    from keras.models import Sequential
-    from keras.layers.core import Dense, Dropout, Activation
-    from keras.optimizers import SGD, Adam
-    import keras.regularizers
-
     print "Neural network"
 
-    for train, test in split_iterator:
-        model = Sequential()
-        model.add(Dense(output_dim=128, input_dim=X.shape[1], init="glorot_uniform"))
-        model.add(Activation("relu"))
-        model.add(Dropout(0.5))
-        model.add(Dense(output_dim=1, init="glorot_uniform"))
-        model.add(Activation("relu"))
+    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=False)
 
-        model.compile(loss="mse", optimizer="adam", class_mode="binary")
+    hyperparameter_space = {
+        "hidden_layer_sizes": [[50], [75], [100], [125]],
+    }
 
-        # minibatch followed by some full batch
-        model.fit(X[train], y[train], nb_epoch=400, batch_size=1024, show_accuracy=True)
-        model.fit(X[train], y[train], nb_epoch=100, batch_size=X.shape[0], show_accuracy=True)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=1, verbose=1)
+    grid_search.fit(X, y)
 
-        train_accuracy = sklearn.metrics.accuracy_score(y[train], model.predict_classes(X[train]))
-        test_accuracy = sklearn.metrics.accuracy_score(y[test], model.predict_classes(X[test]))
+    print_tuning_scores(grid_search)
 
-        print "Training accuracy {:.1f}%".format(100 * train_accuracy)
-        print "Testing accuracy {:.1f}%".format(100 * test_accuracy)
 
-        # logistic regression for reference
-        logistic = sklearn.linear_model.LogisticRegression(C=1.0)
-        logistic.fit(X[train], y[train])
-        print "LR training accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[train], logistic.predict(X[train])))
-        print "LR testing accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[test], logistic.predict(X[test])))
 
-        break
+    # for train, test in split_iterator:
+    #     model = classifiers.NnWrapper(hidden_layer_sizes=[128], dropout=0.5)
+    #     model.fit(X[train], y[train])
+    #
+    #     train_accuracy = sklearn.metrics.accuracy_score(y[train], model.predict(X[train]))
+    #     test_accuracy = sklearn.metrics.accuracy_score(y[test], model.predict(X[test]))
+    #
+    #     print "Training accuracy {:.1f}%".format(100 * train_accuracy)
+    #     print "Testing accuracy {:.1f}%".format(100 * test_accuracy)
+    #
+    #     # logistic regression for reference
+    #     logistic = sklearn.linear_model.LogisticRegression(C=1.0)
+    #     logistic.fit(X[train], y[train])
+    #     print "LR training accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[train], logistic.predict(X[train])))
+    #     print "LR testing accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[test], logistic.predict(X[test])))
+    #
+    #     break
 
 @utilities.Timed
-def logistic_regression(X, y, data, split_iterator, run_feature_scaling=True):
-    if run_feature_scaling:
+def logistic_regression(X, y, data, split_iterator, scale_features=True, solver="lbfgs"):
+    if scale_features:
         X = sklearn.preprocessing.scale(X)
 
     logistic = sklearn.linear_model.LogisticRegression()
 
     hyperparameter_space = {
-        "C": [0.1, 0.5, 1., 2, 4]
+        "C": numpy.logspace(math.log(1e-4, 10), math.log(1e4, 10), num=10),
+        "solver": [solver]
     }
 
     grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X, y)
 
-    if run_feature_scaling:
+    if scale_features:
         print "Logistic regression (feature scaling)"
         print_tuning_scores(grid_search)
         print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
@@ -278,8 +279,8 @@ def logistic_regression(X, y, data, split_iterator, run_feature_scaling=True):
         print_tuning_scores(grid_search)
 
 @utilities.Timed
-def logistic_regression_cv(X, y, data, split_iterator, run_feature_scaling=True, solver="lbfgs"):
-    if run_feature_scaling:
+def logistic_regression_cv(X, y, data, split_iterator, scale_features=True, solver="lbfgs"):
+    if scale_features:
         X = sklearn.preprocessing.scale(X)
 
     logistic = sklearn.linear_model.LogisticRegressionCV(10, solver=solver, n_jobs=N_JOBS, cv=split_iterator)
@@ -291,7 +292,7 @@ def logistic_regression_cv(X, y, data, split_iterator, run_feature_scaling=True,
 
         score_matrix = score_matrix.transpose()
         for c_value, c_scores in zip(logistic.Cs_, score_matrix):
-            print "C={:.2e} Accuracy = {:.2f}% +/- {:.2f}%".format(c_value, 100. * c_scores.mean(), 100. * c_scores.std())
+            print "\tC={:.2e} Accuracy = {:.2f}% +/- {:.2f}%".format(c_value, 100. * c_scores.mean(), 100. * c_scores.std())
 
     print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, logistic)
 
@@ -522,7 +523,7 @@ def main():
         decision_tree(X, y, data, cross_val_splits)
 
     if args.logistic:
-        logistic_regression_cv(X, y, data, cross_val_splits)
+        logistic_regression_cv(X, y, data, cross_val_splits, solver="lbfgs")
 
     if args.learning_curve:
         learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
