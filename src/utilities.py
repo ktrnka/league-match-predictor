@@ -107,8 +107,8 @@ class Timed(object):
         elapsed = time.time() - start_time
 
         hours, seconds = divmod(elapsed, 60 * 60)
-        minutes, seconds = divmod(seconds, 60)
-        time_string = number_string(minutes, "minute", "minutes")
+        minutes = seconds / 60.
+        time_string = number_string(minutes, "minute", "minutes", format_string="{:.1f} {}")
         if hours:
             time_string = ", ".join((number_string(hours, "hour", "hours"), time_string))
 
@@ -131,8 +131,8 @@ class DevReminderError(BaseException):
         super(DevReminderError, self).__init__(message)
 
 
-def number_string(number, singular_unit, plural_unit):
-    return "{} {}".format(number, singular_unit if number == 1 else plural_unit)
+def number_string(number, singular_unit, plural_unit, format_string="{} {}"):
+    return format_string.format(number, singular_unit if number == 1 else plural_unit)
 
 
 def summarize_counts(counter):
