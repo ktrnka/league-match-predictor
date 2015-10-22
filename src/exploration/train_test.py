@@ -100,16 +100,17 @@ def parse_args():
     parser.add_argument("--predictability", default=False, action="store_true", help="Tests to analyse which kinds of matches are most predictable")
     parser.add_argument("--neural-network", default=False, action="store_true", help="Experiments with neural networks")
     parser.add_argument("--save-matrix", default=None, help="File to save the feature matrix to")
+    parser.add_argument("--svm", default=False, action="store_true", help="Support vector machine")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
 @utilities.Timed
 def random_forest(X, y, data, split_iterator):
-    forest = sklearn.ensemble.RandomForestClassifier(10)
+    forest = sklearn.ensemble.RandomForestClassifier()
     hyperparameter_space = {
-        "n_estimators": [100],
-        "min_samples_split": [50],
-        "min_samples_leaf": [5]
+        "n_estimators": [150],
+        "min_samples_split": [10, 25, 50, 75, 100],
+        "min_samples_leaf": [7]
     }
 
     grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
@@ -224,36 +225,17 @@ def neural_network(X, y, data, split_iterator, scale_features=True):
 
     print "Neural network"
 
-    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=False)
+    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (50, -1)))
 
     hyperparameter_space = {
-        "hidden_layer_sizes": [[50], [75], [100], [125]],
+        "hidden_layer_sizes": [(75,), (75, 5)],
+        "dropout": [0.5, 0.6]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=1, verbose=1)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=3, verbose=1)
     grid_search.fit(X, y)
 
     print_tuning_scores(grid_search)
-
-
-
-    # for train, test in split_iterator:
-    #     model = classifiers.NnWrapper(hidden_layer_sizes=[128], dropout=0.5)
-    #     model.fit(X[train], y[train])
-    #
-    #     train_accuracy = sklearn.metrics.accuracy_score(y[train], model.predict(X[train]))
-    #     test_accuracy = sklearn.metrics.accuracy_score(y[test], model.predict(X[test]))
-    #
-    #     print "Training accuracy {:.1f}%".format(100 * train_accuracy)
-    #     print "Testing accuracy {:.1f}%".format(100 * test_accuracy)
-    #
-    #     # logistic regression for reference
-    #     logistic = sklearn.linear_model.LogisticRegression(C=1.0)
-    #     logistic.fit(X[train], y[train])
-    #     print "LR training accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[train], logistic.predict(X[train])))
-    #     print "LR testing accuracy {:.1f}%".format(100 * sklearn.metrics.accuracy_score(y[test], logistic.predict(X[test])))
-    #
-    #     break
 
 @utilities.Timed
 def logistic_regression(X, y, data, split_iterator, scale_features=True, solver="lbfgs"):
@@ -329,20 +311,47 @@ def elastic_net(X, y, split_iterator, scale_features=True):
 
 
 @utilities.Timed
-def gradient_boosting_exp(X, y, data, split_iterator):
-    gradient_boosting = sklearn.ensemble.GradientBoostingClassifier()
+def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
+    gradient_boosting = sklearn.ensemble.GradientBoostingClassifier(init=base_classifier)
     hyperparameter_space = {
         "learning_rate": [0.75, 0.9],
         "min_samples_leaf": [20],
     }
+    # learning_rate: numpy.linspace(0.1, 0.9, 5)
+    # min_samples_leaf: numpy.linspace(5, 40, 5).astype(int)
+    # min_samples_split: numpy.linspace(20, 100, 5).astype(int)
+    # n_estimators: 100, 200, etc (default = 100)
+    # max_depth: 2, 3, 4, 5 (default = 3)
+    # subsample: 0.8, 0.9, 1. (default = 1)
 
-    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator,
-                                                   verbose=1)
+
+    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
     grid_search.fit(X, y)
 
-    print "Gradient boosting classifier"
+    if base_classifier:
+        print "Gradient boosting with base classifier {}".format(base_classifier.__name__)
+    else:
+        print "Gradient boosting classifier"
+
     print_tuning_scores(grid_search)
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
+
+
+@utilities.Timed
+def support_vector_machine(X, y, data, split_iterator):
+    X = sklearn.preprocessing.scale(X)
+
+    hyperparameter_space = {
+        "C": numpy.logspace(math.log(10e-4, 10), math.log(10e4, 10), 10),
+        "kernel": ["rbf", "poly", "sigmoid", "linear"]
+    }
+
+    model = sklearn.svm.SVC()
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
+    grid_search.fit(X, y)
+
+    print "Support vector machine"
+    print_tuning_scores(grid_search)
 
 
 def dataframe_to_ndarrays(data):
@@ -523,7 +532,10 @@ def main():
         decision_tree(X, y, data, cross_val_splits)
 
     if args.logistic:
-        logistic_regression_cv(X, y, data, cross_val_splits, solver="lbfgs")
+        logistic_regression_cv(X, y, data, cross_val_splits)
+
+    if args.svm:
+        support_vector_machine(X, y, data, cross_val_splits)
 
     if args.learning_curve:
         learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
