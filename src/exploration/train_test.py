@@ -1,8 +1,11 @@
 from __future__ import unicode_literals
 import io
-import pprint
 import sys
 import argparse
+from operator import itemgetter
+import collections
+import math
+
 import pandas
 import numpy
 import sklearn.ensemble
@@ -16,11 +19,9 @@ import sklearn.learning_curve
 import matplotlib.pyplot as plt
 import sklearn.decomposition
 import sklearn.preprocessing
-from operator import itemgetter
-import collections
 import classifiers
 import utilities
-import math
+
 
 N_JOBS = 3
 
