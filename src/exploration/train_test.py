@@ -94,6 +94,7 @@ def parse_args():
     parser.add_argument("--forest", default=False, action="store_true", help="Experiments with random forests")
     parser.add_argument("--logistic", default=False, action="store_true", help="Experiments with logistic regression")
     parser.add_argument("--xg", default=False, action="store_true", help="Experiments with gradient boosting trees")
+    parser.add_argument("--xg-hybrid", default=False, action="store_true", help="Experiments with gradient boosting tree hybrid with tuned logistic regression as base classifier")
     parser.add_argument("--elastic", default=False, action="store_true", help="Experiments with elastic nets")
     parser.add_argument("--learning-curve", default=None, help="Generate a learning curve and save to file")
     parser.add_argument("--decision-tree", default=False, action="store_true", help="Experiments with decision trees")
@@ -169,7 +170,7 @@ def predictability_tests(X, y, preprocessed_data, original_data):
         print "\t{:20s}: {:.1f}% accuracy in {:,} samples".format(key, 100. * num_correct / (num_correct + num_incorrect), num_correct + num_incorrect)
 
     with io.open("predictable_features.csv", "w", encoding="UTF-8") as csv_out:
-        csv_out.write(",".join(["Accuracy of RF model"] + [str(x) for x in accuracies]) + "\n")
+        csv_out.write(",".join(["Accuracy of RF model"] + [unicode(x) for x in accuracies]) + "\n")
         csv_out.write("Feature,Prediction accuracy if present,Num testing samples")
 
         for key in sorted(correlations.iterkeys()):
@@ -184,10 +185,8 @@ def predictability_tests(X, y, preprocessed_data, original_data):
 
 
 @utilities.Timed
-def decision_tree(X, y, data, split_iterator):
+def decision_tree(X, y, data, split_iterator, dot_filename=None):
     tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
-
-    # scores = sklearn.cross_validation.cross_val_score(tree, X, y, cv=split_iterator)
 
     hyperparameter_space = {
         "max_depth": [5, 10, 20],
@@ -201,12 +200,11 @@ def decision_tree(X, y, data, split_iterator):
     print "Decision tree tuning"
     print_tuning_scores(grid_search)
 
-    # print "Decision tree: {:.2f}% +/- {:.2f}%".format(100. * scores.mean(), 100. * scores.std())
-
-    # refit for visualization
-    tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
-    tree.fit(X, y)
-    sklearn.tree.export_graphviz(tree, "decision_tree.dot", feature_names=data.drop("IsBlueWinner", axis=1).columns)
+    # refit a shallow tree for visualization
+    if dot_filename:
+        tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
+        tree.fit(X, y)
+        sklearn.tree.export_graphviz(tree, dot_filename, feature_names=data.drop("IsBlueWinner", axis=1).columns)
 
 
 def print_logistic_regression_feature_importances(column_names, classifier):
@@ -312,7 +310,6 @@ def elastic_net(X, y, split_iterator, scale_features=True):
 
 @utilities.Timed
 def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
-    gradient_boosting = sklearn.ensemble.GradientBoostingClassifier(init=base_classifier)
     hyperparameter_space = {
         "learning_rate": [0.75, 0.9],
         "min_samples_leaf": [20],
@@ -325,7 +322,8 @@ def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     # subsample: 0.8, 0.9, 1. (default = 1)
 
 
-    grid_search = sklearn.grid_search.GridSearchCV(gradient_boosting, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
+    model = sklearn.ensemble.GradientBoostingClassifier(init=base_classifier)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
     grid_search.fit(X, y)
 
     if base_classifier:
@@ -346,8 +344,7 @@ def support_vector_machine(X, y, data, split_iterator):
         "kernel": ["rbf", "poly", "sigmoid", "linear"]
     }
 
-    model = sklearn.svm.SVC()
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
+    grid_search = sklearn.grid_search.GridSearchCV(sklearn.svm.SVC(), hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
     grid_search.fit(X, y)
 
     print "Support vector machine"
@@ -484,7 +481,6 @@ def preprocess_features(data, show_example=False):
         data["Delta" + feature_suffix + "_Sum"] = data["Blue" + feature_suffix + "_Sum"] - data["Red" + feature_suffix + "_Sum"]
         data = data.drop(["Blue" + feature_suffix + "_Sum", "Red" + feature_suffix + "_Sum"], axis=1)
 
-
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player champion season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(player season)")
     data = make_diff_feature(data, "_Combined_WinRateSum_PlayedLogSum(cvr ps)")
@@ -551,6 +547,9 @@ def main():
 
     if args.xg:
         gradient_boosting_exp(X, y, data, cross_val_splits)
+
+    if args.xg_hybrid:
+        gradient_boosting_exp(X, y, data, cross_val_splits, base_classifier=sklearn.linear_model.LogisticRegressionCV(5, solver="lbfgs"))
 
     if args.neural_network:
         neural_network(X, y, data, cross_val_splits)
