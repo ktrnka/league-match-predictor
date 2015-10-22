@@ -1,6 +1,4 @@
 from __future__ import unicode_literals
-import sys
-import argparse
 import keras.models
 import keras.layers.core
 import keras.regularizers
@@ -65,15 +63,3 @@ class NnWrapper(sklearn.base.BaseEstimator):
         for mini_batch_epochs in mini_batch_iter:
             assert mini_batch_epochs <= total_epochs
             yield ((mini_batch_epochs, mini_batch_size), (total_epochs - mini_batch_epochs, -1))
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -1,7 +1,5 @@
 from __future__ import unicode_literals
 import logging
-import sys
-import argparse
 import time
 import collections
 import math
@@ -29,7 +27,7 @@ class ThrottledFilter(logging.Filter):
 
 
 class RequestTimer(object):
-    """Simple tracker to help test the time of network requests"""
+    """Track the speed of network requests"""
     def __init__(self):
         self.elapsed_time = 0
         self.num_requests = 0
@@ -51,7 +49,7 @@ class RequestTimer(object):
 
 
 class EstCompletionTimer(object):
-    """Simple tracker to estimate how long it'll take to finish a long-running task"""
+    """Simple tracker to estimate how long it'll take to finish a long-running task with fixed-length steps"""
     def __init__(self):
         self.start_time = None
         self.units_processed = 0
@@ -125,6 +123,7 @@ class LogEntryExit(object):
         self.func(*args, **kwargs)
         print "Exiting {}".format(self.func.__name__)
 
+
 class DevReminderError(BaseException):
     """Error to remind me to implement something"""
     def __init__(self, message):
@@ -153,13 +152,9 @@ def most_common_percent(counter, ratio):
         if cutoff < 0:
             break
 
+
 def binomial_stddev(p, n):
     return math.sqrt(p * (1 - p) / n)
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    return parser.parse_args()
 
 
 def smooth_win_rate(primary_won, primary_played, secondary_win_rate, crossover=10):
@@ -172,14 +167,6 @@ def smooth_win_rate(primary_won, primary_played, secondary_win_rate, crossover=1
     primary_win_rate = primary_won / float(primary_played)
 
     return primary_weight * primary_win_rate + (1 - primary_weight) * secondary_win_rate
-
-
-def main():
-    args = parse_args()
-
-
-if __name__ == "__main__":
-    sys.exit(main())
 
 
 def chunks(l, n):
