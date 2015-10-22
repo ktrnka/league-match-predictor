@@ -25,6 +25,7 @@ import utilities
 
 N_JOBS = 3
 
+
 def learning_curve(training_x, training_y, filename, classifier, classifier_name):
     """Make a learning graph and save it"""
     split_iterator = sklearn.cross_validation.StratifiedShuffleSplit(training_y, n_iter=10, random_state=4)
@@ -108,14 +109,14 @@ def parse_args():
 
 @utilities.Timed
 def random_forest(X, y, data, split_iterator):
-    forest = sklearn.ensemble.RandomForestClassifier()
     hyperparameter_space = {
         "n_estimators": [150],
         "min_samples_split": [10, 25, 50, 75, 100],
         "min_samples_leaf": [7]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(forest, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
+    model = sklearn.ensemble.RandomForestClassifier()
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X, y)
 
     print "Random forest"
@@ -187,15 +188,14 @@ def predictability_tests(X, y, preprocessed_data, original_data):
 
 @utilities.Timed
 def decision_tree(X, y, data, split_iterator, dot_filename=None):
-    tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
-
     hyperparameter_space = {
         "max_depth": [5, 10, 20],
         "min_samples_split": [25, 50, 100],
         "min_samples_leaf": [5, 10, 50]
     }
 
-    grid_search = sklearn.grid_search.GridSearchCV(tree, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
+    model = sklearn.tree.DecisionTreeClassifier(max_depth=5)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
     grid_search.fit(X, y)
 
     print "Decision tree tuning"
@@ -203,9 +203,9 @@ def decision_tree(X, y, data, split_iterator, dot_filename=None):
 
     # refit a shallow tree for visualization
     if dot_filename:
-        tree = sklearn.tree.DecisionTreeClassifier(max_depth=5)
-        tree.fit(X, y)
-        sklearn.tree.export_graphviz(tree, dot_filename, feature_names=data.drop("IsBlueWinner", axis=1).columns)
+        model = sklearn.tree.DecisionTreeClassifier(max_depth=5)
+        model.fit(X, y)
+        sklearn.tree.export_graphviz(model, dot_filename, feature_names=data.drop("IsBlueWinner", axis=1).columns)
 
 
 def print_logistic_regression_feature_importances(column_names, classifier):
@@ -218,51 +218,25 @@ def print_logistic_regression_feature_importances(column_names, classifier):
         print format_string.format(name, weight)
 
 @utilities.Timed
-def neural_network(X, y, data, split_iterator, scale_features=True):
-    if scale_features:
-        X = sklearn.preprocessing.scale(X)
+def neural_network(X, y, data, split_iterator):
+    X = sklearn.preprocessing.scale(X)
 
     print "Neural network"
-
-    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (50, -1)))
 
     hyperparameter_space = {
         "hidden_layer_sizes": [(75,), (75, 5)],
         "dropout": [0.5, 0.6]
     }
 
+    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (50, -1)))
     grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=3, verbose=1)
     grid_search.fit(X, y)
 
     print_tuning_scores(grid_search)
 
 @utilities.Timed
-def logistic_regression(X, y, data, split_iterator, scale_features=True, solver="lbfgs"):
-    if scale_features:
-        X = sklearn.preprocessing.scale(X)
-
-    logistic = sklearn.linear_model.LogisticRegression()
-
-    hyperparameter_space = {
-        "C": numpy.logspace(math.log(1e-4, 10), math.log(1e4, 10), num=10),
-        "solver": [solver]
-    }
-
-    grid_search = sklearn.grid_search.GridSearchCV(logistic, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
-    grid_search.fit(X, y)
-
-    if scale_features:
-        print "Logistic regression (feature scaling)"
-        print_tuning_scores(grid_search)
-        print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
-    else:
-        print "Logistic regression (without feature scaling)"
-        print_tuning_scores(grid_search)
-
-@utilities.Timed
-def logistic_regression_cv(X, y, data, split_iterator, scale_features=True, solver="lbfgs"):
-    if scale_features:
-        X = sklearn.preprocessing.scale(X)
+def logistic_regression_cv(X, y, data, split_iterator, solver="lbfgs"):
+    X = sklearn.preprocessing.scale(X)
 
     logistic = sklearn.linear_model.LogisticRegressionCV(10, solver=solver, n_jobs=N_JOBS, cv=split_iterator)
     logistic.fit(X, y)
@@ -279,9 +253,8 @@ def logistic_regression_cv(X, y, data, split_iterator, scale_features=True, solv
 
 
 @utilities.Timed
-def elastic_net(X, y, split_iterator, scale_features=True):
-    if scale_features:
-        X = sklearn.preprocessing.scale(X)
+def elastic_net(X, y, split_iterator):
+    X = sklearn.preprocessing.scale(X)
 
     # note that GridSearchCV doesn't work with ElasticNet; need to use ElasticNetCV to select alpha and such
     print "Elastic net (CV alpha tuning)"
@@ -321,7 +294,6 @@ def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     # n_estimators: 100, 200, etc (default = 100)
     # max_depth: 2, 3, 4, 5 (default = 3)
     # subsample: 0.8, 0.9, 1. (default = 1)
-
 
     model = sklearn.ensemble.GradientBoostingClassifier(init=base_classifier)
     grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
