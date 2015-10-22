@@ -12,11 +12,12 @@ Wrappers around the scikit-learn classifiers
 
 class NnWrapper(sklearn.base.BaseEstimator):
     """Wrapper for Keras feed-forward neural network to enable things like grid search"""
-    def __init__(self, hidden_layer_sizes=(100,), dropout=0.5, show_accuracy=True, batch_spec=((400, 1024), (100, -1))):
+    def __init__(self, hidden_layer_sizes=(100,), dropout=0.5, show_accuracy=True, batch_spec=((400, 1024), (100, -1)), activation="relu"):
         self.hidden_layer_sizes = hidden_layer_sizes
         self.dropout = dropout
         self.show_accuracy = show_accuracy
         self.batch_spec = batch_spec
+        self.activation = activation
 
         self.model_ = None
 
@@ -31,12 +32,12 @@ class NnWrapper(sklearn.base.BaseEstimator):
                 first = False
             else:
                 model.add(keras.layers.core.Dense(output_dim=layer_size, init="glorot_uniform"))
-            model.add(keras.layers.core.Activation("relu"))
+            model.add(keras.layers.core.Activation(kwargs.get("activation", self.activation)))
             model.add(keras.layers.core.Dropout(kwargs.get("dropout", self.dropout)))
 
         # output layer
         model.add(keras.layers.core.Dense(output_dim=1, init="glorot_uniform"))
-        model.add(keras.layers.core.Activation("relu"))
+        model.add(keras.layers.core.Activation(kwargs.get("activation", self.activation)))
 
         model.compile(loss="mse", optimizer="adam", class_mode="binary")
 
