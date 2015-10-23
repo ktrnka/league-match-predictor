@@ -5,6 +5,7 @@ import keras.layers.core
 import keras.regularizers
 import sklearn.metrics
 import sklearn.base
+import keras.layers.noise
 
 """
 Wrappers around the scikit-learn classifiers
@@ -12,14 +13,15 @@ Wrappers around the scikit-learn classifiers
 
 
 class NnWrapper(sklearn.base.BaseEstimator):
-    """Wrapper for Keras feed-forward neural network to enable things like grid search"""
-    def __init__(self, hidden_layer_sizes=(100,), dropout=0.5, show_accuracy=True, batch_spec=((400, 1024), (100, -1)), activation="relu", input_noise=0.):
+    """Wrapper for Keras feed-forward neural network to enable scikit-learn grid search"""
+    def __init__(self, hidden_layer_sizes=(100,), dropout=0.5, show_accuracy=True, batch_spec=((400, 1024), (100, -1)), activation="relu", input_noise=0., use_maxout=False):
         self.hidden_layer_sizes = hidden_layer_sizes
         self.dropout = dropout
         self.show_accuracy = show_accuracy
         self.batch_spec = batch_spec
         self.activation = activation
         self.input_noise = input_noise
+        self.use_maxout = use_maxout
 
         self.model_ = None
 
@@ -28,20 +30,35 @@ class NnWrapper(sklearn.base.BaseEstimator):
 
         model = keras.models.Sequential()
 
-        # hidden layers
         first = True
+
+        if self.input_noise > 0:
+            model.add(keras.layers.noise.GaussianNoise(self.input_noise, input_shape=X.shape))
+            first = False
+
+        # hidden layers
         for layer_size in self.hidden_layer_sizes:
             if first:
-                model.add(keras.layers.core.Dense(output_dim=layer_size, input_dim=X.shape[1], init="glorot_uniform"))
+                if self.use_maxout:
+                    model.add(keras.layers.core.MaxoutDense(output_dim=layer_size, input_dim=X.shape[1], init="glorot_uniform"))
+                else:
+                    model.add(keras.layers.core.Dense(output_dim=layer_size, input_dim=X.shape[1], init="glorot_uniform"))
+                    model.add(keras.layers.core.Activation(self.activation))
                 first = False
             else:
-                model.add(keras.layers.core.Dense(output_dim=layer_size, init="glorot_uniform"))
-            model.add(keras.layers.core.Activation(self.activation))
+                if self.use_maxout:
+                    model.add(keras.layers.core.MaxoutDense(output_dim=layer_size, init="glorot_uniform"))
+                else:
+                    model.add(keras.layers.core.Dense(output_dim=layer_size, init="glorot_uniform"))
+                    model.add(keras.layers.core.Activation(self.activation))
             model.add(keras.layers.core.Dropout(self.dropout))
 
         # output layer
-        model.add(keras.layers.core.Dense(output_dim=1, init="glorot_uniform"))
-        model.add(keras.layers.core.Activation(self.activation))
+        if self.use_maxout:
+            model.add(keras.layers.core.MaxoutDense(output_dim=1, init="glorot_uniform"))
+        else:
+            model.add(keras.layers.core.Dense(output_dim=1, init="glorot_uniform"))
+            model.add(keras.layers.core.Activation(self.activation))
 
         model.compile(loss="mse", optimizer="adam", class_mode="binary")
 
