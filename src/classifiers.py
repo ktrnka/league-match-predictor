@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+import numpy
 import keras.models
 import keras.layers.core
 import keras.regularizers
@@ -64,3 +65,12 @@ class NnWrapper(sklearn.base.BaseEstimator):
         for mini_batch_epochs in mini_batch_iter:
             assert mini_batch_epochs <= total_epochs
             yield ((mini_batch_epochs, mini_batch_size), (total_epochs - mini_batch_epochs, -1))
+
+
+class LogisticRegressionCVWrapper(sklearn.linear_model.LogisticRegressionCV):
+    """Wrapper for LogisticRegressionCV that's compatible with GradientBoostingClassifier sample_weights"""
+    def fit(self, X, y, sample_weight, **kwargs):
+        super(LogisticRegressionCVWrapper, self).fit(X, y, **kwargs)
+
+    def predict(self, X):
+        return self.predict_proba(X)[:, 1][:, numpy.newaxis]

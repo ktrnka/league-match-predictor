@@ -111,12 +111,13 @@ def parse_args():
 def random_forest(X, y, data, split_iterator):
     hyperparameter_space = {
         "n_estimators": [150],
-        "min_samples_split": [10, 25, 50, 75, 100],
-        "min_samples_leaf": [7]
+        "min_samples_split": [50],
+        "min_samples_leaf": [7],
+        "oob_score": [True, False]
     }
 
     model = sklearn.ensemble.RandomForestClassifier()
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
     grid_search.fit(X, y)
 
     print "Random forest"
@@ -195,7 +196,7 @@ def decision_tree(X, y, data, split_iterator, dot_filename=None):
     }
 
     model = sklearn.tree.DecisionTreeClassifier(max_depth=5)
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
     grid_search.fit(X, y)
 
     print "Decision tree tuning"
@@ -285,7 +286,7 @@ def elastic_net(X, y, split_iterator):
 @utilities.Timed
 def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     hyperparameter_space = {
-        "learning_rate": [0.75, 0.9],
+        "learning_rate": [0.75],
         "min_samples_leaf": [20],
     }
     # learning_rate: numpy.linspace(0.1, 0.9, 5)
@@ -300,7 +301,7 @@ def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     grid_search.fit(X, y)
 
     if base_classifier:
-        print "Gradient boosting with base classifier {}".format(base_classifier.__name__)
+        print "Gradient boosting with base classifier"
     else:
         print "Gradient boosting classifier"
 
@@ -495,7 +496,7 @@ def main():
     X, y = dataframe_to_ndarrays(data)
     check_data(X, y)
 
-    cross_val_splits = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
+    cross_val_splits = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=5, random_state=4)
 
     if args.decision_tree:
         decision_tree(X, y, data, cross_val_splits)
@@ -522,7 +523,7 @@ def main():
         gradient_boosting_exp(X, y, data, cross_val_splits)
 
     if args.xg_hybrid:
-        gradient_boosting_exp(X, y, data, cross_val_splits, base_classifier=sklearn.linear_model.LogisticRegressionCV(5, solver="lbfgs"))
+        gradient_boosting_exp(X, y, data, cross_val_splits, base_classifier=classifiers.LogisticRegressionCVWrapper(5, solver="lbfgs"))
 
     if args.neural_network:
         neural_network(X, y, data, cross_val_splits)
