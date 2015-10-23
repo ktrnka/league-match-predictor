@@ -26,14 +26,11 @@ import utilities
 N_JOBS = 3
 
 
-def learning_curve(training_x, training_y, filename, classifier, classifier_name):
+def learning_curve(X, y, filename, classifier, classifier_name):
     """Make a learning graph and save it"""
-    split_iterator = sklearn.cross_validation.StratifiedShuffleSplit(training_y, n_iter=10, random_state=4)
-    train_sizes, train_scores, test_scores = sklearn.learning_curve.learning_curve(classifier, training_x,
-                                                                                   training_y, cv=split_iterator,
-                                                                                   train_sizes=numpy.linspace(.1, 1.,
-                                                                                                              10),
-                                                                                   verbose=0)
+    split_iterator = sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, random_state=4)
+    train_sizes, train_scores, test_scores = sklearn.learning_curve.learning_curve(classifier, X, y, cv=split_iterator,
+                                                                                   train_sizes=numpy.linspace(.1, 1., 10))
 
     training_means = train_scores.mean(axis=1)
     training_std = train_scores.std(axis=1)
@@ -103,7 +100,6 @@ def parse_args():
     parser.add_argument("--predictability", default=False, action="store_true", help="Tests to analyse which kinds of matches are most predictable")
     parser.add_argument("--neural-network", default=False, action="store_true", help="Experiments with neural networks")
     parser.add_argument("--save-matrix", default=None, help="File to save the feature matrix to")
-    parser.add_argument("--svm", default=False, action="store_true", help="Support vector machine")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -286,8 +282,9 @@ def elastic_net(X, y, split_iterator):
 @utilities.Timed
 def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     hyperparameter_space = {
-        "learning_rate": [0.75],
+        "learning_rate": numpy.linspace(0.1, 0.8, 8),
         "min_samples_leaf": [20],
+        "n_estimators": [100, 200]
     }
     # learning_rate: numpy.linspace(0.1, 0.9, 5)
     # min_samples_leaf: numpy.linspace(5, 40, 5).astype(int)
@@ -307,22 +304,6 @@ def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
 
     print_tuning_scores(grid_search)
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
-
-
-@utilities.Timed
-def support_vector_machine(X, y, data, split_iterator):
-    X = sklearn.preprocessing.scale(X)
-
-    hyperparameter_space = {
-        "C": numpy.logspace(math.log(10e-4, 10), math.log(10e4, 10), 10),
-        "kernel": ["rbf", "poly", "sigmoid", "linear"]
-    }
-
-    grid_search = sklearn.grid_search.GridSearchCV(sklearn.svm.SVC(), hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
-    grid_search.fit(X, y)
-
-    print "Support vector machine"
-    print_tuning_scores(grid_search)
 
 
 def dataframe_to_ndarrays(data):
@@ -503,9 +484,6 @@ def main():
 
     if args.logistic:
         logistic_regression_cv(X, y, data, cross_val_splits)
-
-    if args.svm:
-        support_vector_machine(X, y, data, cross_val_splits)
 
     if args.learning_curve:
         learning_curve(X, y, args.learning_curve, sklearn.ensemble.RandomForestClassifier(100), "Random Forest Classifier")
