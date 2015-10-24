@@ -33,32 +33,34 @@ class NnWrapper(sklearn.base.BaseEstimator):
         first = True
 
         if self.input_noise > 0:
-            model.add(keras.layers.noise.GaussianNoise(self.input_noise, input_shape=X.shape))
-            first = False
+            model.add(keras.layers.noise.GaussianNoise(self.input_noise, input_shape=X.shape[1:]))
+            # first = False
+
+        num_maxout_features = 2
 
         # hidden layers
         for layer_size in self.hidden_layer_sizes:
             if first:
                 if self.use_maxout:
-                    model.add(keras.layers.core.MaxoutDense(output_dim=layer_size, input_dim=X.shape[1], init="glorot_uniform"))
+                    model.add(keras.layers.core.MaxoutDense(output_dim=layer_size / num_maxout_features, input_dim=X.shape[1], init="glorot_uniform", nb_feature=num_maxout_features))
                 else:
                     model.add(keras.layers.core.Dense(output_dim=layer_size, input_dim=X.shape[1], init="glorot_uniform"))
                     model.add(keras.layers.core.Activation(self.activation))
                 first = False
             else:
                 if self.use_maxout:
-                    model.add(keras.layers.core.MaxoutDense(output_dim=layer_size, init="glorot_uniform"))
+                    model.add(keras.layers.core.MaxoutDense(output_dim=layer_size / num_maxout_features, init="glorot_uniform", nb_feature=num_maxout_features))
                 else:
                     model.add(keras.layers.core.Dense(output_dim=layer_size, init="glorot_uniform"))
                     model.add(keras.layers.core.Activation(self.activation))
             model.add(keras.layers.core.Dropout(self.dropout))
 
         # output layer
-        if self.use_maxout:
-            model.add(keras.layers.core.MaxoutDense(output_dim=1, init="glorot_uniform"))
-        else:
-            model.add(keras.layers.core.Dense(output_dim=1, init="glorot_uniform"))
-            model.add(keras.layers.core.Activation(self.activation))
+        # if self.use_maxout:
+        #     model.add(keras.layers.core.MaxoutDense(output_dim=1, init="glorot_uniform"))
+        # else:
+        model.add(keras.layers.core.Dense(output_dim=1, init="glorot_uniform"))
+        model.add(keras.layers.core.Activation(self.activation))
 
         model.compile(loss="mse", optimizer="adam", class_mode="binary")
 

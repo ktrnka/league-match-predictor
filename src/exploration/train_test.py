@@ -221,12 +221,14 @@ def neural_network(X, y, data, split_iterator):
     print "Neural network"
 
     hyperparameter_space = {
-        "hidden_layer_sizes": [(75,), (75, 5)],
-        "dropout": [0.5, 0.6]
+        "hidden_layer_sizes": [(75,)],
+        "dropout": [0.5],
+        # "input_noise": [0.1 ,0.],
+        "use_maxout": [True, False]
     }
 
     model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (50, -1)))
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=3, verbose=1)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=3, verbose=1, refit=False)
     grid_search.fit(X, y)
 
     print_tuning_scores(grid_search)
@@ -282,7 +284,7 @@ def elastic_net(X, y, split_iterator):
 @utilities.Timed
 def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     hyperparameter_space = {
-        "learning_rate": numpy.linspace(0.1, 0.8, 8),
+        "learning_rate": [0.1, 0.2],
         "min_samples_leaf": [20],
         "n_estimators": [100, 200]
     }
