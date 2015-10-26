@@ -207,7 +207,7 @@ def decision_tree(X, y, data, split_iterator, dot_filename=None):
 
 
 def print_logistic_regression_feature_importances(column_names, classifier):
-    parameters = classifier.coef_[0,:]
+    parameters = classifier.coef_[0, :]
     paired = zip(column_names, parameters)
     field_width = unicode(max(len(c) for c in column_names))
     format_string = "\t{:" + field_width + "s}: {}"
@@ -222,8 +222,9 @@ def neural_network(X, y, data, split_iterator):
     print "Neural network"
 
     hyperparameter_space = {
-        "hidden_layer_sizes": [(75,), (100,), (125,), (75, 5)],
+        "hidden_layer_sizes": [(75,)],
         "dropout": [0.5],
+        "use_maxnorm": [False, True]
         # "input_noise": [0., 0.1],
         # "use_maxout": [True, False]
     }
@@ -477,6 +478,7 @@ def main():
     if args.save_matrix:
         data.to_csv(args.save_matrix)
 
+    global N_JOBS
     N_JOBS = args.n_jobs
 
     X, y = dataframe_to_ndarrays(data)

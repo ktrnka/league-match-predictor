@@ -5,7 +5,9 @@ import keras.layers.core
 import keras.regularizers
 import sklearn.metrics
 import sklearn.base
+import keras.constraints
 import keras.layers.noise
+import keras.optimizers
 
 """
 Wrappers around the scikit-learn classifiers
@@ -14,7 +16,7 @@ Wrappers around the scikit-learn classifiers
 
 class NnWrapper(sklearn.base.BaseEstimator):
     """Wrapper for Keras feed-forward neural network to enable scikit-learn grid search"""
-    def __init__(self, hidden_layer_sizes=(100,), dropout=0.5, show_accuracy=True, batch_spec=((400, 1024), (100, -1)), activation="relu", input_noise=0., use_maxout=False):
+    def __init__(self, hidden_layer_sizes=(100,), dropout=0.5, show_accuracy=True, batch_spec=((400, 1024), (100, -1)), activation="relu", input_noise=0., use_maxout=False, use_maxnorm=False):
         self.hidden_layer_sizes = hidden_layer_sizes
         self.dropout = dropout
         self.show_accuracy = show_accuracy
@@ -22,6 +24,7 @@ class NnWrapper(sklearn.base.BaseEstimator):
         self.activation = activation
         self.input_noise = input_noise
         self.use_maxout = use_maxout
+        self.use_maxnorm = use_maxnorm
 
         self.model_ = None
 
@@ -38,20 +41,24 @@ class NnWrapper(sklearn.base.BaseEstimator):
 
         num_maxout_features = 2
 
+        dense_kwargs = {"init": "glorot_uniform"}
+        if self.use_maxnorm:
+            dense_kwargs["W_constraint"] = keras.constraints.maxnorm(4)
+
         # hidden layers
         for layer_size in self.hidden_layer_sizes:
             if first:
                 if self.use_maxout:
                     model.add(keras.layers.core.MaxoutDense(output_dim=layer_size / num_maxout_features, input_dim=X.shape[1], init="glorot_uniform", nb_feature=num_maxout_features))
                 else:
-                    model.add(keras.layers.core.Dense(output_dim=layer_size, input_dim=X.shape[1], init="glorot_uniform"))
+                    model.add(keras.layers.core.Dense(output_dim=layer_size, input_dim=X.shape[1], **dense_kwargs))
                     model.add(keras.layers.core.Activation(self.activation))
                 first = False
             else:
                 if self.use_maxout:
                     model.add(keras.layers.core.MaxoutDense(output_dim=layer_size / num_maxout_features, init="glorot_uniform", nb_feature=num_maxout_features))
                 else:
-                    model.add(keras.layers.core.Dense(output_dim=layer_size, init="glorot_uniform"))
+                    model.add(keras.layers.core.Dense(output_dim=layer_size, **dense_kwargs))
                     model.add(keras.layers.core.Activation(self.activation))
             model.add(keras.layers.core.Dropout(self.dropout))
 
@@ -59,15 +66,17 @@ class NnWrapper(sklearn.base.BaseEstimator):
         # if self.use_maxout:
         #     model.add(keras.layers.core.MaxoutDense(output_dim=1, init="glorot_uniform"))
         # else:
-        model.add(keras.layers.core.Dense(output_dim=1, init="glorot_uniform"))
+        model.add(keras.layers.core.Dense(output_dim=1, **dense_kwargs))
         model.add(keras.layers.core.Activation(self.activation))
 
-        model.compile(loss="mse", optimizer="adam", class_mode="binary")
+        optimizer = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+        model.compile(loss="mse", optimizer=optimizer, class_mode="binary")
 
         # batches as per configuration
         for num_iterations, batch_size in self.batch_spec:
             if batch_size < 0:
                 batch_size = X.shape[0]
+                # optimizer.lr.set_value(0.0001)
             if num_iterations > 0:
                 model.fit(X, y, nb_epoch=num_iterations, batch_size=batch_size, show_accuracy=self.show_accuracy)
 
