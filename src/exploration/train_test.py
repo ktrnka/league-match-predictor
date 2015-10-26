@@ -89,7 +89,7 @@ def print_feature_importances(columns, classifier):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--forest", default=False, action="store_true", help="Experiments with random forests")
     parser.add_argument("--logistic", default=False, action="store_true", help="Experiments with logistic regression")
     parser.add_argument("--xg", default=False, action="store_true", help="Experiments with gradient boosting trees")
@@ -100,6 +100,7 @@ def parse_args():
     parser.add_argument("--predictability", default=False, action="store_true", help="Tests to analyse which kinds of matches are most predictable")
     parser.add_argument("--neural-network", default=False, action="store_true", help="Experiments with neural networks")
     parser.add_argument("--save-matrix", default=None, help="File to save the feature matrix to")
+    parser.add_argument("--n-jobs", default=3, type=int, help="Number of processes to use")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -113,7 +114,7 @@ def random_forest(X, y, data, split_iterator):
     }
 
     model = sklearn.ensemble.RandomForestClassifier()
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1, refit=False)
     grid_search.fit(X, y)
 
     print "Random forest"
@@ -221,13 +222,13 @@ def neural_network(X, y, data, split_iterator):
     print "Neural network"
 
     hyperparameter_space = {
-        "hidden_layer_sizes": [(75,)],
+        "hidden_layer_sizes": [(75,), (100,), (125,), (75, 5)],
         "dropout": [0.5],
-        # "input_noise": [0.1 ,0.],
-        "use_maxout": [True, False]
+        # "input_noise": [0., 0.1],
+        # "use_maxout": [True, False]
     }
 
-    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (50, -1)))
+    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (100, -1)))
     grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=3, verbose=1, refit=False)
     grid_search.fit(X, y)
 
@@ -284,9 +285,9 @@ def elastic_net(X, y, split_iterator):
 @utilities.Timed
 def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     hyperparameter_space = {
-        "learning_rate": [0.1, 0.2],
+        "learning_rate": [0.2],
         "min_samples_leaf": [20],
-        "n_estimators": [100, 200]
+        "n_estimators": [300]
     }
     # learning_rate: numpy.linspace(0.1, 0.9, 5)
     # min_samples_leaf: numpy.linspace(5, 40, 5).astype(int)
@@ -296,7 +297,7 @@ def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     # subsample: 0.8, 0.9, 1. (default = 1)
 
     model = sklearn.ensemble.GradientBoostingClassifier(init=base_classifier)
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1, refit=False)
     grid_search.fit(X, y)
 
     if base_classifier:
@@ -475,6 +476,8 @@ def main():
 
     if args.save_matrix:
         data.to_csv(args.save_matrix)
+
+    N_JOBS = args.n_jobs
 
     X, y = dataframe_to_ndarrays(data)
     check_data(X, y)
