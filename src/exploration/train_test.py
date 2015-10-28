@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import io
+import logging
 import sys
 import argparse
 from operator import itemgetter
@@ -222,11 +223,8 @@ def neural_network(X, y, data, split_iterator):
     print "Neural network"
 
     hyperparameter_space = {
-        "hidden_layer_sizes": [(75,)],
-        "dropout": [0.5],
-        "use_maxnorm": [False, True]
-        # "input_noise": [0., 0.1],
-        # "use_maxout": [True, False]
+        "hidden_layer_sizes": [tuple()],
+        "stop_early": [True]
     }
 
     model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (100, -1)))
@@ -295,7 +293,7 @@ def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     # min_samples_split: numpy.linspace(20, 100, 5).astype(int)
     # n_estimators: 100, 200, etc (default = 100)
     # max_depth: 2, 3, 4, 5 (default = 3)
-    # subsample: 0.8, 0.9, 1. (default = 1)
+    # subsample: 0.5, 0.8, 0.9, 1. (default = 1)
 
     model = sklearn.ensemble.GradientBoostingClassifier(init=base_classifier)
     grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1, refit=False)
@@ -471,6 +469,8 @@ def check_data(X, y):
 
 def main():
     args = parse_args()
+
+    logging.basicConfig(level=logging.INFO)
 
     original_data = pandas.read_csv(args.input, header=0)
     data = preprocess_features(original_data)
