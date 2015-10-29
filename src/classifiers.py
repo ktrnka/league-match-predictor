@@ -79,14 +79,15 @@ class NnWrapper(sklearn.base.BaseEstimator):
 
         # batches as per configuration
         for num_iterations, batch_size in self.batch_spec:
-            callbacks = []
-            if self.stop_early:
-                callbacks.append(EarlyStopping(monitor='val_combined', patience=10, verbose=1))
+            fit_kwargs = {}
+            if self.stop_early and batch_size > 0:
+                fit_kwargs["callbacks"] = [EarlyStopping(monitor='val_loss', patience=20, verbose=1)]
+                fit_kwargs["validation_split"] = 0.2
 
             if batch_size < 0:
                 batch_size = X.shape[0]
             if num_iterations > 0:
-                model.fit(X, y, nb_epoch=num_iterations, batch_size=batch_size, show_accuracy=self.show_accuracy, callbacks=callbacks, validation_split=0.2)
+                model.fit(X, y, nb_epoch=num_iterations, batch_size=batch_size, show_accuracy=self.show_accuracy, **fit_kwargs)
 
         if self.stop_early:
             # final refit with full data
@@ -137,13 +138,10 @@ class EarlyStopping(keras.callbacks.Callback):
         else:
             current = logs.get(self.monitor)
 
-        self.logger.info("Stopping criteria: %f", current)
+        # self.logger.info("Stopping criteria: %f", current)
 
         if current is None:
             self.logger.warn("Early stopping requires %s available!", self.monitor)
-
-        # if self.monitor.endswith("_acc"):
-        #     current = 1 - current
 
         if current < self.best:
             self.best = current
