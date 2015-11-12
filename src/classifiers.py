@@ -17,7 +17,7 @@ Wrappers around the scikit-learn classifiers
 
 
 class NnWrapper(sklearn.base.BaseEstimator):
-    """Wrapper for Keras feed-forward neural network to enable scikit-learn grid search"""
+    """Wrapper for Keras feed-forward neural network for classification to enable scikit-learn grid search"""
     def __init__(self, hidden_layer_sizes=(100,), dropout=0.5, show_accuracy=True, batch_spec=((400, 1024), (100, -1)), activation="relu", input_noise=0., use_maxout=False, use_maxnorm=False, learning_rate=0.001, stop_early=False):
         self.hidden_layer_sizes = hidden_layer_sizes
         self.dropout = dropout
@@ -94,6 +94,7 @@ class NnWrapper(sklearn.base.BaseEstimator):
             model.fit(X, y, nb_epoch=5, batch_size=X.shape[0], show_accuracy=self.show_accuracy)
 
         self.model_ = model
+        return self
 
     def predict(self, X):
         return self.model_.predict_classes(X)
@@ -109,6 +110,68 @@ class NnWrapper(sklearn.base.BaseEstimator):
         for mini_batch_epochs in mini_batch_iter:
             assert mini_batch_epochs <= total_epochs
             yield ((mini_batch_epochs, mini_batch_size), (total_epochs - mini_batch_epochs, -1))
+
+
+class EnsembleClassifier(sklearn.base.BaseEstimator, sklearn.base.ClassifierMixin):
+    def __init__(self, classifiers=None):
+        self.classifiers = classifiers
+        self.classifiers_ = None
+
+    def fit(self, X, y, **kwargs):
+        self.classifiers_ = [sklearn.base.clone(c).fit(X, y, **kwargs) for c in self.classifiers]
+
+    def _convert_proba(self, proba):
+        if proba.shape[1] == 1:
+            return proba
+        elif proba.shape[1] == 2:
+            return proba[:, 1].reshape((proba.shape[0], 1))
+
+        print "Unknown prob shape"
+        return proba
+
+    def predict_proba(self, X):
+        probas = numpy.hstack([self._convert_proba(c.predict_proba(X)) for c in self.classifiers_])
+        assert probas.shape[0] == X.shape[0]
+        assert probas.shape[1] == len(self.classifiers_)
+        # return numpy.power(numpy.product(probas, axis=1), 1. / probas.shape[1])
+        return numpy.mean(probas, axis=1)
+
+    def predict(self, X):
+        return self.predict_proba(X) > 0.5
+
+
+class LogisticEnsembleClassifier(sklearn.base.BaseEstimator, sklearn.base.ClassifierMixin):
+    def __init__(self, classifiers=None):
+        self.classifiers = classifiers
+
+        self.classifiers_ = None
+        self.arbiter_ = None
+
+    def fit(self, X, y, **kwargs):
+        self.classifiers_ = [sklearn.base.clone(c).fit(X, y, **kwargs) for c in self.classifiers]
+
+        # output probs on training data
+        probas = numpy.hstack([self._convert_proba(c.predict_proba(X)) for c in self.classifiers_])
+        assert probas.shape[0] == X.shape[0]
+        assert probas.shape[1] == len(self.classifiers_)
+        self.arbiter_ = sklearn.linear_model.LogisticRegressionCV(10, solver="lbfgs")
+        self.arbiter_.fit(probas, y)
+
+    def _convert_proba(self, proba):
+        if proba.shape[1] == 1:
+            return proba
+        elif proba.shape[1] == 2:
+            return proba[:, 1].reshape((proba.shape[0], 1))
+
+        print "Unknown prob shape"
+        return proba
+
+    def predict_proba(self, X):
+        probas = numpy.hstack([self._convert_proba(c.predict_proba(X)) for c in self.classifiers_])
+        return self._convert_proba(self.arbiter_.predict_proba(probas))
+
+    def predict(self, X):
+        return self.predict_proba(X) > 0.5
 
 
 class LogisticRegressionCVWrapper(sklearn.linear_model.LogisticRegressionCV):

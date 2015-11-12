@@ -9,6 +9,7 @@ import math
 
 import pandas
 import numpy
+import riot_data
 import sklearn.ensemble
 import sklearn.cross_validation
 import sklearn.linear_model
@@ -102,6 +103,8 @@ def parse_args():
     parser.add_argument("--neural-network", default=False, action="store_true", help="Experiments with neural networks")
     parser.add_argument("--save-matrix", default=None, help="File to save the feature matrix to")
     parser.add_argument("--n-jobs", default=3, type=int, help="Number of processes to use")
+    parser.add_argument("--ensemble", default=False, action="store_true", help="Ensemble of multiple classifiers")
+    parser.add_argument("--logistic-ensemble", default=False, action="store_true", help="Ensemble of multiple classifiers with their probs fed into LR")
     parser.add_argument("input", help="CSV of possible features")
     return parser.parse_args()
 
@@ -110,12 +113,11 @@ def random_forest(X, y, data, split_iterator):
     hyperparameter_space = {
         "n_estimators": [150],
         "min_samples_split": [50],
-        "min_samples_leaf": [7],
-        "oob_score": [True, False]
+        "min_samples_leaf": [7]
     }
 
     model = sklearn.ensemble.RandomForestClassifier()
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1, refit=False)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
     grid_search.fit(X, y)
 
     print "Random forest"
@@ -123,8 +125,11 @@ def random_forest(X, y, data, split_iterator):
     print_feature_importances(data.drop("IsBlueWinner", axis=1).columns, grid_search.best_estimator_)
 
 @utilities.Timed
-def predictability_tests(X, y, preprocessed_data, original_data):
-    forest = sklearn.ensemble.RandomForestClassifier(n_estimators=100, min_samples_split=50, min_samples_leaf=5)
+def predictability_tests(X, y, original_data):
+    X = sklearn.preprocessing.scale(X)
+
+    # model = sklearn.ensemble.RandomForestClassifier(n_estimators=100, min_samples_split=50, min_samples_leaf=5)
+    model = sklearn.linear_model.LogisticRegressionCV(10, solver="lbfgs", n_jobs=N_JOBS)
 
     print "Original data cols: {}".format(", ".join(sorted(original_data.columns)))
 
@@ -132,12 +137,12 @@ def predictability_tests(X, y, preprocessed_data, original_data):
     accuracies = []
 
     for train_indices, test_indices in sklearn.cross_validation.StratifiedShuffleSplit(y, n_iter=10, test_size=0.1, random_state=4):
-        forest.fit(X[train_indices, :], y[train_indices])
+        model.fit(X[train_indices, :], y[train_indices])
 
-        predictions = forest.predict(X[test_indices, :])
+        predictions = model.predict(X[test_indices, :])
         accuracy = sklearn.metrics.accuracy_score(y[test_indices], predictions)
 
-        print "Random forest {:.2f}% accuracy in {:,} samples".format(accuracy * 100., len(test_indices))
+        print "Predictability test {:.2f}% accuracy in {:,} samples".format(accuracy * 100., len(test_indices))
         accuracies.append(accuracy)
 
         for test_index, prediction_index in zip(test_indices, xrange(len(predictions))):
@@ -156,7 +161,12 @@ def predictability_tests(X, y, preprocessed_data, original_data):
             for champ in champs:
                 correlations["Game has {}".format(champ)][prediction_outcome] += 1
 
+            points = (original_data.Blue_Points[test_index] + original_data.Red_Points[test_index]) / 2.
+            league = riot_data.LeagueEntry.from_points(points)
+            correlations["League {}".format(league.tier)][prediction_outcome] += 1
+
             correlations["Blue Tier {} Red Tier {}".format(original_data.Blue_Tier[test_index], original_data.Red_Tier[test_index])][prediction_outcome] += 1
+            correlations["Average"][prediction_outcome] += 1
 
     print "Overall {:.2f}% +/- {:.2f}%".format(100. * numpy.mean(accuracies), 100. * numpy.std(accuracies))
     print "Predictability by segment"
@@ -172,7 +182,7 @@ def predictability_tests(X, y, preprocessed_data, original_data):
 
     with io.open("predictable_features.csv", "w", encoding="UTF-8") as csv_out:
         csv_out.write(",".join(["Accuracy of RF model"] + [unicode(x) for x in accuracies]) + "\n")
-        csv_out.write("Feature,Prediction accuracy if present,Num testing samples")
+        csv_out.write("Feature,Prediction accuracy if present,Num testing samples\n")
 
         for key in sorted(correlations.iterkeys()):
             # print correlations[key].keys()
@@ -223,12 +233,12 @@ def neural_network(X, y, data, split_iterator):
     print "Neural network"
 
     hyperparameter_space = {
-        "hidden_layer_sizes": [tuple()],
-        "stop_early": [True]
+        "hidden_layer_sizes": [(75,)],
+        "dropout": [0.5]
     }
 
-    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((250, 1014), (100, -1)))
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=3, verbose=1, refit=False)
+    model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((100, 1024), (100, -1)))
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=3, verbose=1)
     grid_search.fit(X, y)
 
     print_tuning_scores(grid_search)
@@ -237,18 +247,18 @@ def neural_network(X, y, data, split_iterator):
 def logistic_regression_cv(X, y, data, split_iterator, solver="lbfgs"):
     X = sklearn.preprocessing.scale(X)
 
-    logistic = sklearn.linear_model.LogisticRegressionCV(10, solver=solver, n_jobs=N_JOBS, cv=split_iterator)
-    logistic.fit(X, y)
+    model = sklearn.linear_model.LogisticRegressionCV(10, solver=solver, n_jobs=N_JOBS, cv=split_iterator)
+    model.fit(X, y)
 
     print "Logistic regression (CV)"
-    for label, score_matrix in logistic.scores_.iteritems():
+    for label, score_matrix in model.scores_.iteritems():
         print "Label {}".format(label)
 
         score_matrix = score_matrix.transpose()
-        for c_value, c_scores in zip(logistic.Cs_, score_matrix):
+        for c_value, c_scores in zip(model.Cs_, score_matrix):
             print "\tC={:.2e} Accuracy = {:.2f}% +/- {:.2f}%".format(c_value, 100. * c_scores.mean(), 100. * c_scores.std())
 
-    print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, logistic)
+    print_logistic_regression_feature_importances(data.drop("IsBlueWinner", axis=1).columns, model)
 
 
 @utilities.Timed
@@ -283,10 +293,14 @@ def elastic_net(X, y, split_iterator):
 
 @utilities.Timed
 def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
+    # if base_classifier:
+    #     X = sklearn.preprocessing.scale(X)
+
     hyperparameter_space = {
-        "learning_rate": [0.2],
-        "min_samples_leaf": [20],
-        "n_estimators": [300]
+        "learning_rate": [0.2167],
+        "min_samples_leaf": [10],
+        "n_estimators": [300],
+        "subsample": [0.9],
     }
     # learning_rate: numpy.linspace(0.1, 0.9, 5)
     # min_samples_leaf: numpy.linspace(5, 40, 5).astype(int)
@@ -296,7 +310,7 @@ def gradient_boosting_exp(X, y, data, split_iterator, base_classifier=None):
     # subsample: 0.5, 0.8, 0.9, 1. (default = 1)
 
     model = sklearn.ensemble.GradientBoostingClassifier(init=base_classifier)
-    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1, refit=False)
+    grid_search = sklearn.grid_search.GridSearchCV(model, hyperparameter_space, n_jobs=N_JOBS, cv=split_iterator, verbose=1)
     grid_search.fit(X, y)
 
     if base_classifier:
@@ -466,6 +480,31 @@ def check_data(X, y):
     assert y.shape[0] > 10000
     assert X.shape[0] == y.shape[0]
 
+@utilities.Timed
+def ensemble(X, y, cross_val_splits):
+    X = sklearn.preprocessing.scale(X)
+
+    nn_model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((100, 1024), (100, -1)), hidden_layer_sizes=(75,))
+    gb_model = sklearn.ensemble.GradientBoostingClassifier(subsample=0.9, learning_rate=0.25, min_samples_leaf=10, n_estimators=300, init=classifiers.LogisticRegressionCVWrapper(5, solver="lbfgs"))
+    lr_model = sklearn.linear_model.LogisticRegressionCV(10)
+
+    model = classifiers.EnsembleClassifier([nn_model, gb_model, lr_model])
+    scores = sklearn.cross_validation.cross_val_score(model, X, y, cv=cross_val_splits, n_jobs=N_JOBS)
+
+    print "Ensemble {:.2f} +/- {:.2f}".format(100. * scores.mean(), 100. * scores.std())
+
+
+@utilities.Timed
+def logistic_ensemble(X, y, cross_val_splits):
+    X = sklearn.preprocessing.scale(X)
+
+    nn_model = classifiers.NnWrapper(dropout=0.5, show_accuracy=True, batch_spec=((100, 1024), (100, -1)), hidden_layer_sizes=(75,))
+    gb_model = sklearn.ensemble.GradientBoostingClassifier(subsample=0.9, learning_rate=0.25, min_samples_leaf=10, n_estimators=300, init=classifiers.LogisticRegressionCVWrapper(5, solver="lbfgs"))
+
+    model = classifiers.LogisticEnsembleClassifier([nn_model, gb_model])
+    scores = sklearn.cross_validation.cross_val_score(model, X, y, cv=cross_val_splits, n_jobs=N_JOBS)
+
+    print "Ensemble {:.2f} +/- {:.2f}".format(100. * scores.mean(), 100. * scores.std())
 
 def main():
     args = parse_args()
@@ -499,7 +538,7 @@ def main():
         random_forest(X, y, data, cross_val_splits)
 
     if args.predictability:
-        predictability_tests(X, y, data, original_data)
+        predictability_tests(X, y, original_data)
 
     if args.elastic:
         elastic_net(X, y, cross_val_splits)
@@ -513,6 +552,11 @@ def main():
     if args.neural_network:
         neural_network(X, y, data, cross_val_splits)
 
+    if args.ensemble:
+        ensemble(X, y, cross_val_splits)
+
+    if args.logistic_ensemble:
+        logistic_ensemble(X, y, cross_val_splits)
 
 if __name__ == "__main__":
     sys.exit(main())
