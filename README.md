@@ -2,9 +2,15 @@
 
 Code for crawling Riot Games API, populating a MongoDB, and running machine learning experiments to predict who will win the games.
 
+## Note
+This is a fork from my main repo with the configuration/API keys removed from the history. Unfortunately the data is too big to include in the repository itself.
+
 ## Setup
 
-* For crawling, install from requirements.txt
-* For machine learning, install from requirements-ml.txt
+* Install from requirements.txt.
+* Download dataset from https://dl.dropboxusercontent.com/u/2094014/site/matches_10_13_200k.csv.gz
 
-There are two separate ones because the Heroku instance doesn't have enough space to install the full set of requirements.
+## Running
+
+From the src directory:
+```PYTHONPATH=$PYTHONPATH:. python exploration/train_test.py --xg --n-jobs 3 path/to/matches_10_13_200k.csv.gz```
