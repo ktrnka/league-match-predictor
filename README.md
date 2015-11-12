@@ -8,9 +8,10 @@ This is a fork from my main repo with the configuration/API keys removed from th
 ## Setup
 
 * Install from requirements.txt.
-* Download dataset from https://dl.dropboxusercontent.com/u/2094014/site/matches_10_13_200k.csv.gz
+* Small dataset: https://dl.dropboxusercontent.com/u/2094014/league-predictor/matches_10_20_50k.csv.gz
+* Medium dataset: https://dl.dropboxusercontent.com/u/2094014/league-predictor/matches_10_13_200k.csv.gz
 
 ## Running
 
 From the src directory:
-```PYTHONPATH=$PYTHONPATH:. python exploration/train_test.py --xg --n-jobs 3 path/to/matches_10_13_200k.csv.gz```
+```PYTHONPATH=$PYTHONPATH:. python exploration/train_test.py --xg --n-jobs 3 path/to/dataset```
