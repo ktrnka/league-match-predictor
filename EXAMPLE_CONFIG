@@ -1,0 +1,14 @@
+[riot]
+api_key=FILL_THIS_IN
+api_delay_seconds=0.00333333333333
+base=https://na.api.pvp.net/api/lol/na/
+static_base=https://global.api.pvp.net/api/lol/static-data/na/
+observer_base=https://na.api.pvp.net/observer-mode/rest/
+
+[mongo]
+match_uri=mongodb://FILL_THIS_IN
+summoner_uri=mongodb://FILL_THIS_IN
+
+[mongo_local]
+match_uri=mongodb://FILL_THIS_IN
+summoner_uri=mongodb://FILL_THIS_IN
